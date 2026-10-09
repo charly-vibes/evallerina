@@ -50,6 +50,15 @@ enum Command {
         #[arg(long, default_value_t = DEFAULT_BUDGET_MINS)]
         budget_mins: u64,
     },
+    /// Aggregate report rows (one JSON value per line in a JSONL file —
+    /// tier-2 rotation events or tier-1 rows) into the per-channel
+    /// fault dashboard. Prints the dashboard JSON to stdout; exits
+    /// nonzero on aggregation errors (unknown scenario, version
+    /// mismatch), never on fault findings.
+    Report {
+        /// Path to the JSONL report rows to aggregate.
+        path: String,
+    },
 }
 
 fn main() -> std::process::ExitCode {
@@ -78,6 +87,13 @@ fn main() -> std::process::ExitCode {
             model,
             budget_mins,
         } => match run_live(scenario, reps, model, budget_mins) {
+            Ok(code) => code,
+            Err(msg) => {
+                eprintln!("{msg}");
+                ExitCode::FAILURE
+            }
+        },
+        Command::Report { path } => match run_report(&path) {
             Ok(code) => code,
             Err(msg) => {
                 eprintln!("{msg}");
@@ -137,4 +153,30 @@ fn run_live(
     } else {
         Ok(ExitCode::SUCCESS)
     }
+}
+
+/// Aggregate a JSONL file of report rows into the fault dashboard.
+/// The configured model registry comes from the checked-in registry;
+/// the channel map from the live scenario registry. Findings do not
+/// affect the exit code — the dashboard is the record, and nonzero
+/// exits are reserved for aggregation errors.
+fn run_report(path: &str) -> Result<ExitCode, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("cannot read report rows from {path}: {e}"))?;
+    let rows: Vec<serde_json::Value> = content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).map_err(|e| format!("malformed report row: {e}")))
+        .collect::<Result<Vec<_>, String>>()?;
+    let configured: Vec<String> = ordered_ids().into_iter().map(String::from).collect();
+    let dashboard = evallerina::report::aggregate_rows(
+        &rows,
+        &configured,
+        &evallerina::report::scenario_channel,
+    )?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&dashboard).expect("dashboard serializes")
+    );
+    Ok(ExitCode::SUCCESS)
 }

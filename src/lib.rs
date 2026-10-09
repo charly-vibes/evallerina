@@ -15,4 +15,5 @@ pub mod envelope;
 pub mod live;
 pub mod recorded;
 pub mod registry;
+pub mod report;
 pub mod scenario;
