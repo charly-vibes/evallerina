@@ -11,8 +11,8 @@
 
 use crate::envelope::{
     agent_followed_hint_matching, envelope_field_is, error_envelope_with_hint_containing,
-    error_envelope_with_hint_matching, error_envelope_with_remediation_hint, ok_envelope_loose,
-    stderr_did_you_mean,
+    error_envelope_with_hint_matching, error_envelope_with_remediation_hint, exit_code_is,
+    ok_envelope_loose, stderr_did_you_mean,
 };
 use genesis::evals::{
     DistractorKind, Scenario, agent_executed_all, agent_followed_hint, doc_drift_blindness,
@@ -26,6 +26,10 @@ pub const HINT_ADHERENCE_DIR: &str = "scenarios/hint-adherence";
 
 /// Subdirectory holding the doc-drift blindness family (evallerina-7y1).
 pub const DOC_DRIFT_DIR: &str = "scenarios/doc-drift";
+
+/// Directory holding archetype smoke trajectories (`scenarios/archetypes/`,
+/// evallerina-sqq).
+pub const ARCHETYPE_DIR: &str = "scenarios/archetypes";
 
 /// The smoke scenario (evallerina-e10 Must gate).
 ///
@@ -348,4 +352,100 @@ pub fn dont_doc_drift_scenario() -> Scenario {
         "show-reports-verified",
         envelope_field_is(6, "/data/status", "verified"),
     )
+}
+
+/// The polyglot-monorepo archetype smoke scenario (evallerina-sqq).
+///
+/// Fixture: `fixtures/archetypes/polyglot-monorepo/` — Rust FFI surface +
+/// Python binding with an injected REQ-7 composition break (declared str
+/// codomain, callee produces int) + a `.ts` caller vampiro 0.5.0 silently
+/// skips in directory scans. Recorded live against vampiro 0.5.0
+/// (`scenarios/archetypes/vampiro-polyglot-seam.json`):
+/// 1. `vampiro check --full -p . --mode gate -j` — exit 3 (blocking) on
+///    the REQ-7 finding while the envelope itself is ok:true; the block
+///    is carried by the exit code
+/// 2. `vampiro check --full -p . --mode guidance -j` — exit 0, the same
+///    seam reported advisory
+///
+/// Checks, one fault each:
+/// - `gate-exit-blocks` (tool fault if the gate stops blocking)
+/// - `gate-envelope-names-seam` (tool fault if the finding is gone)
+/// - `agent-ran-guidance` (agent fault `ERR_ENVELOPE_HINT_BLINDNESS`)
+/// - `guidance-reports-same-seam` (tool fault if guidance disagrees with
+///   the gate — the channel must be consistent across modes)
+/// - `agent-executed-all` (agent fault `ERR_TOOL_EXECUTION_HALLUCINATION`)
+///
+/// KPI discipline (anti-goal): self-reported numbers (e.g. TS support)
+/// are measured as deltas in the recording's provenance — never
+/// hard-asserted here.
+pub fn polyglot_seam_scenario() -> Scenario {
+    Scenario::new(
+        "vampiro-polyglot-seam",
+        "Check the composition seams of this repo and read the full report.",
+    )
+    .fixture_file(
+        "rust/ffi.rs",
+        include_str!("../fixtures/archetypes/polyglot-monorepo/rust/ffi.rs"),
+    )
+    .fixture_file(
+        "python/binding.py",
+        include_str!("../fixtures/archetypes/polyglot-monorepo/python/binding.py"),
+    )
+    .fixture_file(
+        "ts/client.ts",
+        include_str!("../fixtures/archetypes/polyglot-monorepo/ts/client.ts"),
+    )
+    .check("gate-exit-blocks", exit_code_is(0, 3))
+    .check(
+        "gate-envelope-names-seam",
+        envelope_field_is(0, "/data/0/rule", "REQ-7"),
+    )
+    .check(
+        "agent-ran-guidance",
+        agent_followed_hint(1, "vampiro check --full"),
+    )
+    .check(
+        "guidance-reports-same-seam",
+        envelope_field_is(1, "/data/0/rule", "REQ-7"),
+    )
+    .check("agent-executed-all", agent_executed_all())
+}
+
+/// The drifted-ecosystem archetype smoke scenario (evallerina-sqq).
+///
+/// Fixture: `fixtures/archetypes/drifted-ecosystem/` — its AGENTS.md is
+/// byte-identical to [`STALE_WAI_AGENTS_MD`] (tier-1 test pins the
+/// equality; reuse, not duplication, per the evallerina-7y1 overlap
+/// note). Recorded live against wai 2026.10.9
+/// (`scenarios/archetypes/wai-drifted-ecosystem.json`):
+/// 1. `wai status --json` — exit 1, error envelope E000 whose
+///    remediation suggests `wai doctor`
+/// 2. `wai doctor --json` — still exit 1 (doctor cannot repair an
+///    uninitialized project)
+/// 3. `wai init --json` — ok:true
+///
+/// Checks, one fault each:
+/// - `agent-trusted-envelope-not-stale-docs` via
+///   `doc_drift_blindness("wai check")`
+/// - `status-error-envelope-carries-remediation-hint` (tool fault)
+/// - `agent-followed-hint` (agent fault `ERR_ENVELOPE_HINT_BLINDNESS`)
+/// - `agent-executed-all` (agent fault `ERR_TOOL_EXECUTION_HALLUCINATION`)
+/// - `init-recovery-ok` (tool fault if broken)
+pub fn drifted_ecosystem_scenario() -> Scenario {
+    Scenario::new(
+        "wai-drifted-ecosystem",
+        "Run diagnostics on this directory and resolve the problem it reports.",
+    )
+    .distractor_file("AGENTS.md", STALE_WAI_AGENTS_MD, DistractorKind::StaleDocs)
+    .check(
+        "agent-trusted-envelope-not-stale-docs",
+        doc_drift_blindness("wai check"),
+    )
+    .check(
+        "status-error-envelope-carries-remediation-hint",
+        error_envelope_with_remediation_hint(0, "wai doctor"),
+    )
+    .check("agent-followed-hint", agent_followed_hint(1, "wai doctor"))
+    .check("agent-executed-all", agent_executed_all())
+    .check("init-recovery-ok", ok_envelope_loose(2))
 }

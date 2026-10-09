@@ -328,3 +328,22 @@ pub fn agent_followed_hint_matching(
         }
     }
 }
+
+/// Assert the command at `steps[step]` exited with exactly `expected`.
+/// Tool fault otherwise (the agent cannot change what the tool exits —
+/// e.g. vampiro's gate mode blocking with exit 3 on a medium finding).
+pub fn exit_code_is(step: usize, expected: i32) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    move |result: &ScenarioResult| {
+        let Some(s) = result.steps.get(step) else {
+            return CheckOutcome::tool_fault(format!("no step {step} in replay"));
+        };
+        if s.exit_code == expected {
+            CheckOutcome::pass()
+        } else {
+            CheckOutcome::tool_fault(format!(
+                "step {step} exited {}; expected {expected}",
+                s.exit_code
+            ))
+        }
+    }
+}

@@ -1,0 +1,25 @@
+{
+ "name": "vampiro-polyglot-seam",
+ "provenance": "ticket evallerina-sqq (polyglot-monorepo archetype smoke). Recorded live against vampiro 0.5.0 on 2026-10-09 in a scratch copy of fixtures/archetypes/polyglot-monorepo: `vampiro check --full -p . --mode gate -j` blocks (exit 3) on the injected REQ-7 return-boundary composition break (./python/binding.py declares str codomain, callee produces int, severity medium) while the envelope itself is ok:true \u2014 the block is carried by the exit code; `--mode guidance -j` reports the same seam advisory (exit 0). Delta note (measured, not asserted): the directory scan covers 2 of 3 fixture files \u2014 `.ts` is silently skipped by 0.5.0 although the tool README advertises TS support. Channel note: check envelopes embed the fixture-relative path; checks therefore assert on rule/axis, never on capture-time paths.",
+ "recorded": {
+  "tool": "vampiro",
+  "version": "0.5.0",
+  "date": "2026-10-09"
+ },
+ "steps": [
+  {
+   "command": "vampiro check --full -p . --mode gate -j",
+   "stdout": "{\n  \"ok\": true,\n  \"envelope_version\": \"0.1\",\n  \"cli_version\": \"0.5.0\",\n  \"envelope_kind\": \"check\",\n  \"data\": [\n    {\n      \"axis\": \"composition\",\n      \"classification\": \"composition-break\",\n      \"evidence\": {\n        \"composition-mismatch\": {\n          \"callee_produced\": {\n            \"scalar\": \"int\"\n          },\n          \"caller_expected\": {\n            \"scalar\": \"string\"\n          }\n        }\n      },\n      \"line-range-end\": 17,\n      \"line-range-start\": 17,\n      \"path\": \"./python/binding.py\",\n      \"rule\": \"REQ-7\",\n      \"severity\": \"medium\",\n      \"stable-id\": \"REQ-7:17:df0166e3\"\n    }\n  ],\n  \"warnings\": [],\n  \"hints\": [],\n  \"meta\": {\n    \"duration_ms\": 0,\n    \"tx\": null,\n    \"request_id\": null\n  }\n}\n",
+   "stderr": "",
+   "exit_code": 3,
+   "executed": true
+  },
+  {
+   "command": "vampiro check --full -p . --mode guidance -j",
+   "stdout": "{\n  \"ok\": true,\n  \"envelope_version\": \"0.1\",\n  \"cli_version\": \"0.5.0\",\n  \"envelope_kind\": \"check\",\n  \"data\": [\n    {\n      \"axis\": \"composition\",\n      \"classification\": \"composition-break\",\n      \"evidence\": {\n        \"composition-mismatch\": {\n          \"callee_produced\": {\n            \"scalar\": \"int\"\n          },\n          \"caller_expected\": {\n            \"scalar\": \"string\"\n          }\n        }\n      },\n      \"line-range-end\": 17,\n      \"line-range-start\": 17,\n      \"path\": \"./python/binding.py\",\n      \"rule\": \"REQ-7\",\n      \"severity\": \"medium\",\n      \"stable-id\": \"REQ-7:17:df0166e3\"\n    }\n  ],\n  \"warnings\": [],\n  \"hints\": [],\n  \"meta\": {\n    \"duration_ms\": 0,\n    \"tx\": null,\n    \"request_id\": null\n  }\n}\n",
+   "stderr": "",
+   "exit_code": 0,
+   "executed": true
+  }
+ ]
+}

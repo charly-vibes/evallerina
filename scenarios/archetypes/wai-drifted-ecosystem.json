@@ -1,0 +1,32 @@
+{
+ "name": "wai-drifted-ecosystem",
+ "provenance": "ticket evallerina-sqq (drifted-ecosystem archetype smoke; reuses the evallerina-7y1 stale-AGENTS.md bait byte-for-byte \u2014 see fixtures/archetypes/drifted-ecosystem). Recorded live against wai 2026.10.9 on 2026-10-09 in a scratch $TMPDIR directory pre-seeded with the stale managed block baiting `wai check`: the agent trusts the live envelope over the stale docs \u2014 `wai status --json` exits 1 with E000 whose data.remediation suggests `wai doctor`; `wai doctor --json` still exits 1 (doctor cannot fix an uninitialized project); the root-cause fix `wai init --json` succeeds ok:true. Channel note: human preamble line precedes the envelope in init stdout; extract_envelope tolerates it. KPI delta (measured at capture, not asserted): wai status meta.duration_ms ~2ms as the context-recovery proxy.",
+ "recorded": {
+  "tool": "wai",
+  "version": "2026.10.9",
+  "date": "2026-10-09"
+ },
+ "steps": [
+  {
+   "command": "wai status --json",
+   "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.9\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+   "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+   "exit_code": 1,
+   "executed": true
+  },
+  {
+   "command": "wai doctor --json",
+   "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.9\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+   "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+   "exit_code": 1,
+   "executed": true
+  },
+  {
+   "command": "wai init --json",
+   "stdout": "Using default project name: drifted-UebVT6\n{\n  \"ok\": true,\n  \"envelope_version\": \"0.1\",\n  \"cli_version\": \"2026.10.9\",\n  \"envelope_kind\": \"ok\",\n  \"data\": {\n    \"project_name\": \"drifted-UebVT6\",\n    \"already_initialized\": false,\n    \"detected_plugins\": [],\n    \"suggestions\": [\n      {\n        \"label\": \"Sync agent configs\",\n        \"command\": \"wai sync\"\n      },\n      {\n        \"label\": \"Create your first project\",\n        \"command\": \"wai new project \\\"my-app\\\"\"\n      },\n      {\n        \"label\": \"Check project status\",\n        \"command\": \"wai status\"\n      },\n      {\n        \"label\": \"Check workspace health\",\n        \"command\": \"wai doctor\"\n      },\n      {\n        \"label\": \"See workflow conventions and available skills\",\n        \"command\": \"wai way\"\n      }\n    ]\n  },\n  \"warnings\": [],\n  \"hints\": [],\n  \"meta\": {\n    \"duration_ms\": 0,\n    \"tx\": null,\n    \"request_id\": null\n  }\n}\n",
+   "stderr": "",
+   "exit_code": 0,
+   "executed": true
+  }
+ ]
+}

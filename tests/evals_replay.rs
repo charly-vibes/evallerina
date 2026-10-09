@@ -8,9 +8,10 @@
 
 use evallerina::recorded::RecordedTrajectory;
 use evallerina::scenario::{
-    DOC_DRIFT_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD, STALE_WAI_AGENTS_MD,
-    dont_doc_drift_scenario, dont_lifecycle_scenario, smoke_scenario, wai_corrupt_config_scenario,
-    wai_doc_drift_scenario, wai_typo_scenario,
+    ARCHETYPE_DIR, DOC_DRIFT_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD, STALE_WAI_AGENTS_MD,
+    dont_doc_drift_scenario, dont_lifecycle_scenario, drifted_ecosystem_scenario,
+    polyglot_seam_scenario, smoke_scenario, wai_corrupt_config_scenario, wai_doc_drift_scenario,
+    wai_typo_scenario,
 };
 use genesis::evals::{AgentStep, Scenario, agent_executed_all, agent_followed_hint};
 
@@ -457,5 +458,59 @@ fn dont_doc_drift_blind_replay_is_detected() {
     assert!(
         reasons.iter().any(|r| r.contains("AGENTS.md")),
         "failure reason must name the distractor path, got: {reasons:?}"
+    );
+}
+
+// ---------------------------------------------------------------------
+// evallerina-sqq: synthetic repo archetypes under scenarios/archetypes/
+// ---------------------------------------------------------------------
+
+/// Load a recorded trajectory from `scenarios/archetypes/` by name.
+fn archetype_trajectory(name: &str) -> RecordedTrajectory {
+    recorded_trajectory(ARCHETYPE_DIR, name)
+}
+
+/// Must gate (evallerina-sqq): the polyglot-monorepo archetype replays
+/// green — vampiro's gate mode blocks (exit 3) on the injected REQ-7
+/// composition break and guidance reports the same seam; the agent ran
+/// the advisory read after the blocking gate.
+#[test]
+fn vampiro_polyglot_seam_replays_green() {
+    let trajectory = archetype_trajectory("vampiro-polyglot-seam");
+    let report = polyglot_seam_scenario()
+        .run(trajectory.steps())
+        .expect("fixture materializes");
+    assert!(
+        report.passed,
+        "polyglot seam scenario must pass, failures: {}",
+        serde_json::to_string(&report).unwrap()
+    );
+}
+
+/// Must gate (evallerina-sqq): the drifted-ecosystem archetype replays
+/// green — the agent trusted the live envelope over the stale AGENTS.md
+/// bait (byte-identical to the 7y1 constant) and landed wai init ok.
+#[test]
+fn wai_drifted_ecosystem_replays_green() {
+    let trajectory = archetype_trajectory("wai-drifted-ecosystem");
+    let report = drifted_ecosystem_scenario()
+        .run(trajectory.steps())
+        .expect("fixture materializes");
+    assert!(
+        report.passed,
+        "drifted ecosystem scenario must pass, failures: {}",
+        serde_json::to_string(&report).unwrap()
+    );
+}
+
+/// The committed drifted-ecosystem bait must stay byte-identical to the
+/// scenario.rs constant it reuses (evallerina-sqq overlap note: reuse,
+/// do not duplicate).
+#[test]
+fn drifted_ecosystem_fixture_bait_matches_constant() {
+    assert_eq!(
+        include_str!("../fixtures/archetypes/drifted-ecosystem/AGENTS.md"),
+        STALE_WAI_AGENTS_MD,
+        "fixture AGENTS.md must equal STALE_WAI_AGENTS_MD"
     );
 }
