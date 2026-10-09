@@ -119,6 +119,21 @@ pub trait Transport {
     fn complete(&mut self, messages: &[Message]) -> Result<String, TransportError>;
 }
 
+/// AIX ablation arm (evals.md Step 5): the environment variant a trial
+/// runs in. `Full` arms carry the AIX artifacts (llms.txt, managed
+/// AGENTS.md, `.genesis/tools.toml`); `Ablated` arms expose raw
+/// binaries with no AIX context. Serialized on tier-2 rows — an
+/// additive field, report_version 1 unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Arm {
+    /// AIX artifacts provisioned (llms.txt, managed AGENTS.md,
+    /// `.genesis/tools.toml`).
+    Full,
+    /// Raw binaries, no AIX context.
+    Ablated,
+}
+
 /// Trial outcome status (evals-guidelines interoperable report contract).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -173,6 +188,8 @@ pub enum RotationEvent {
         model: String,
         /// 0-based repetition index that was skipped.
         repetition: u32,
+        /// The environment variant the cell belongs to (A/B ablation).
+        arm: Arm,
     },
 }
 
@@ -208,6 +225,9 @@ pub struct TrialReport {
     pub model: String,
     /// 0-based repetition index within the scenario × model cell.
     pub repetition: u32,
+    /// The environment variant the trial ran in (A/B ablation,
+    /// evals.md Step 5). Additive field, report_version 1 unchanged.
+    pub arm: Arm,
     /// Step terminated by the per-command wall-clock timeout, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timed_out_step: Option<usize>,
@@ -417,6 +437,32 @@ pub fn run_trial(
     transport: &mut dyn Transport,
     bounds: &Bounds,
 ) -> Result<TrialReport, String> {
+    run_trial_with_arm(
+        scenario,
+        model,
+        repetition,
+        transport,
+        bounds,
+        Arm::Full,
+        &[],
+    )
+}
+
+/// [`run_trial`] with an A/B ablation arm (evals.md Step 5): `arm` is
+/// recorded on the row, and `extra_fixture_files` are written into the
+/// fixture after the scenario's own fixtures and distractors (the full
+/// arm provisions its AIX artifacts this way; the ablated arm passes
+/// none). Extra files never overwrite scenario material — callers
+/// must pre-check collisions.
+pub fn run_trial_with_arm(
+    scenario: &Scenario,
+    model: &str,
+    repetition: u32,
+    transport: &mut dyn Transport,
+    bounds: &Bounds,
+    arm: Arm,
+    extra_fixture_files: &[(String, String)],
+) -> Result<TrialReport, String> {
     // Materialize the fixture once; the agent observes it only through
     // executed actions.
     let fixture = genesis::fixture::Fixture::new()
@@ -428,6 +474,9 @@ pub fn run_trial(
     }
     for d in &scenario.distractors {
         write_fixture_file(fixture.root(), &d.path, &d.content)?;
+    }
+    for (path, content) in extra_fixture_files {
+        write_fixture_file(fixture.root(), path, content)?;
     }
     let fixture_root: PathBuf = fixture.root().to_path_buf();
     let home = fixture.root().join(".sandbox-home");
@@ -631,6 +680,7 @@ pub fn run_trial(
         rate_limit_delay_ms,
         model: model.to_owned(),
         repetition,
+        arm,
         timed_out_step,
         sandbox: SandboxReport {
             isolated_home: true,
@@ -660,6 +710,52 @@ pub fn run_rotation(
     bounds: &Bounds,
     budget_remaining: &dyn Fn() -> bool,
 ) -> Result<Vec<RotationEvent>, String> {
+    run_rotation_with_arm(
+        scenarios,
+        models,
+        reps,
+        &ArmContext::full(),
+        transport_factory,
+        bounds,
+        budget_remaining,
+    )
+}
+
+/// The A/B arm context a rotation runs under: the arm recorded on the
+/// rows plus the arm's extra fixture files (the full arm's AIX
+/// artifacts). Bundled so the rotation API stays arg-disciplined.
+#[derive(Debug, Clone)]
+pub struct ArmContext<'a> {
+    /// The arm recorded on every row.
+    pub arm: Arm,
+    /// Files written into each trial's fixture after the scenario's
+    /// own material (empty for the ablated arm).
+    pub extra_fixture_files: &'a [(String, String)],
+}
+
+impl ArmContext<'_> {
+    /// The plain rotation context: full arm, no extra fixtures.
+    pub fn full() -> Self {
+        Self {
+            arm: Arm::Full,
+            extra_fixture_files: &[],
+        }
+    }
+}
+
+/// [`run_rotation`] with an A/B ablation arm (evals.md Step 5): every
+/// cell is attributed to the context's arm on its row, and its
+/// `extra_fixture_files` are provisioned into each trial's fixture
+/// after the scenario's own material (the full arm's AIX artifacts).
+pub fn run_rotation_with_arm(
+    scenarios: &[Scenario],
+    models: &[String],
+    reps: u32,
+    context: &ArmContext<'_>,
+    transport_factory: TransportFactory<'_>,
+    bounds: &Bounds,
+    budget_remaining: &dyn Fn() -> bool,
+) -> Result<Vec<RotationEvent>, String> {
     let mut events = Vec::new();
     for model in models {
         // One transport per model cell: the production adapter binds a
@@ -672,10 +768,19 @@ pub fn run_rotation(
                         scenario: scenario.name.clone(),
                         model: model.clone(),
                         repetition,
+                        arm: context.arm,
                     });
                     continue;
                 }
-                let report = run_trial(scenario, model, repetition, &mut *transport, bounds)?;
+                let report = run_trial_with_arm(
+                    scenario,
+                    model,
+                    repetition,
+                    &mut *transport,
+                    bounds,
+                    context.arm,
+                    context.extra_fixture_files,
+                )?;
                 events.push(RotationEvent::Trial {
                     report: Box::new(report),
                 });

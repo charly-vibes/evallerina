@@ -160,6 +160,7 @@ fn rotation_records_unstarted_cells_absent_never_failed() {
                 scenario,
                 model: absent_model,
                 repetition,
+                ..
             } => {
                 assert_eq!(scenario, "probe");
                 assert_eq!(absent_model, model);
