@@ -8,7 +8,9 @@
 //! is a thin adapter behind the same `Transport` seam and requires
 //! OPENROUTER_API_KEY at runtime, never in tests.
 
-use evallerina::live::{Bounds, Message, Transport, TransportError, TrialStatus, run_trial};
+use evallerina::live::{
+    Bounds, Message, RotationEvent, Transport, TransportError, TrialStatus, run_rotation, run_trial,
+};
 use evallerina::scenario::smoke_scenario;
 use genesis::evals::Scenario;
 
@@ -58,6 +60,165 @@ fn probe_scenario() -> Scenario {
 
 fn default_bounds() -> Bounds {
     Bounds::default()
+}
+
+// ── rotation (evallerina-aay) ───────────────────────────────────────────────
+
+/// Scripted fake-transport factory for rotation tests: one fresh transport
+/// per model, each with enough well-formed completions for the reps asked.
+fn fake_factory(
+    mut make_completion: impl FnMut() -> Result<String, TransportError>,
+) -> impl FnMut(&str) -> Result<Box<dyn Transport>, String> {
+    move |_model| {
+        // Standard green trial: touch the fixture, then declare done.
+        Ok(Box::new(FakeTransport::new(vec![
+            Ok(action("printf ok > touched.txt", false)),
+            make_completion(),
+        ])) as Box<dyn Transport>)
+    }
+}
+
+/// An always-true budget: every cell runs.
+fn budget_open() -> bool {
+    true
+}
+
+/// A budget that stays open for `n` calls, then closes (deterministic
+/// mid-rotation expiry without sleeping).
+fn budget_closes_after(n: u32) -> impl Fn() -> bool {
+    let remaining = std::cell::Cell::new(n);
+    move || {
+        if remaining.get() == 0 {
+            return false;
+        }
+        remaining.set(remaining.get() - 1);
+        true
+    }
+}
+
+/// With an open budget the whole registry runs in order, one trial event
+/// per cell, and every event is a trial (never absent, never failed).
+#[test]
+fn rotation_runs_whole_registry_in_order_when_budget_open() {
+    let mut factory = fake_factory(|| Ok(action("true", true)));
+    let models: Vec<String> = evallerina::registry::ordered_ids()
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let scenarios = [probe_scenario()];
+    let events = run_rotation(
+        &scenarios,
+        &models,
+        1,
+        &mut factory,
+        &default_bounds(),
+        &budget_open,
+    )
+    .expect("rotation runs");
+
+    assert_eq!(events.len(), 3);
+    for (event, model) in events.iter().zip(&models) {
+        match event {
+            RotationEvent::Trial { report } => {
+                assert_eq!(report.status, TrialStatus::Passed);
+                assert_eq!(&report.model, model);
+                assert_eq!(report.report_version, 1);
+            }
+            RotationEvent::Absent { .. } => {
+                panic!("no cell may be absent when the budget is open")
+            }
+        }
+    }
+}
+
+/// An exhausted budget records every unstarted cell as `absent` — never
+/// as a failed row and never silently dropped.
+#[test]
+fn rotation_records_unstarted_cells_absent_never_failed() {
+    let mut factory = fake_factory(|| Ok(action("true", true)));
+    let models: Vec<String> = evallerina::registry::ordered_ids()
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let scenarios = [probe_scenario()];
+    let events = run_rotation(
+        &scenarios,
+        &models,
+        1,
+        &mut factory,
+        &default_bounds(),
+        &budget_closes_after(0),
+    )
+    .expect("rotation runs");
+
+    assert_eq!(events.len(), 3);
+    for (event, model) in events.iter().zip(&models) {
+        match event {
+            RotationEvent::Trial { .. } => {
+                panic!("no trial may run past an exhausted budget")
+            }
+            RotationEvent::Absent {
+                scenario,
+                model: absent_model,
+                repetition,
+            } => {
+                assert_eq!(scenario, "probe");
+                assert_eq!(absent_model, model);
+                assert_eq!(*repetition, 0);
+            }
+        }
+    }
+}
+
+/// Budget expiry mid-rotation: the trial already started runs to
+/// completion, the remaining repetitions of the rotation are recorded
+/// absent at trial granularity.
+#[test]
+fn rotation_partial_budget_finishes_started_trial_rest_absent() {
+    let mut factory = fake_factory(|| Ok(action("true", true)));
+    let models: Vec<String> = evallerina::registry::ordered_ids()
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let scenarios = [probe_scenario()];
+    let events = run_rotation(
+        &scenarios,
+        &models,
+        1,
+        &mut factory,
+        &default_bounds(),
+        &budget_closes_after(1),
+    )
+    .expect("rotation runs");
+
+    assert_eq!(events.len(), 3);
+    assert!(matches!(events[0], RotationEvent::Trial { .. }));
+    assert!(
+        events[1..]
+            .iter()
+            .all(|e| matches!(e, RotationEvent::Absent { .. }))
+    );
+}
+
+/// A transport-factory failure (e.g. missing API key) aborts the rotation
+/// with an error — silent degradation is the anti-goal.
+#[test]
+fn rotation_factory_error_aborts_loudly() {
+    let models: Vec<String> = vec!["m1".into(), "m2".into()];
+    let mut factory = |_model: &str| -> Result<Box<dyn Transport>, String> {
+        Err("OPENROUTER_API_KEY is not set".into())
+    };
+    let scenarios = [probe_scenario()];
+    let err = run_rotation(
+        &scenarios,
+        &models,
+        1,
+        &mut factory,
+        &default_bounds(),
+        &budget_open,
+    )
+    .expect_err("factory error must abort");
+    assert!(err.contains("OPENROUTER_API_KEY"));
 }
 
 // ── action protocol ──────────────────────────────────────────────────────────

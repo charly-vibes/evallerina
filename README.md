@@ -48,9 +48,12 @@ reports/         # tier-2 report rows, report_version JSON contract
 
 ## Status
 
-Harness crate scaffolded (tier 0/1): `just tier0` runs fmt/clippy/test, `just tier1`
-replays the recorded wai smoke trajectory, `just smoke` prints the serialized report.
-Tier-2 live runner is tracked in beads (`bd ready`).
+Harness crate complete through tier 2: `just tier0` runs fmt/clippy/test,
+`just tier1` replays the recorded trajectories, `just smoke` prints the serialized
+report, and `just tier2` runs the live rotation (scenario × model cells, one JSON
+event per cell — trial row or absent record when the per-run wall-clock budget
+skips it). GHA: tier-0 gates every push, tier-1 replays nightly, tier-2 rotates
+weekly (`evals-rotation.yml`, never gates a push).
 
 ## Related
 

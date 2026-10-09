@@ -1,19 +1,24 @@
 //! Purpose: CLI entry point of the evallerina harness.
 //! Responsibilities: expose the tier commands the justfile recipes
 //! invoke — `smoke` (run the replay smoke scenario, exit code carries
-//! pass/fail) and `live` (tier-2 live model runs; stub until
-//! evallerina-1vw lands the OpenRouter action-protocol runner).
+//! pass/fail) and `live` (tier-2 live rotation over scenario × model
+//! cells via the OpenRouter :free action protocol).
 //! Rationale: tier discipline — the binary gates tier-0/1 locally and
-//! in CI; tier-2 never gates a push and is a deliberately separate
-//! ticket, so `live` reports unimplemented rather than pretending.
+//! in CI; tier-2 never gates a push. `live` prints one JSON event per
+//! cell (trial row or absent record) and exits nonzero only when a
+//! trial actually failed or malformed — skipped cells are the record.
 
 use std::process::ExitCode;
+use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
-use evallerina::live::OpenRouterTransport;
+use evallerina::live::{OpenRouterTransport, RotationEvent, TrialStatus, run_rotation};
 use evallerina::recorded::RecordedTrajectory;
 use evallerina::registry::{DEFAULT_REPETITIONS, ordered_ids};
-use evallerina::scenario::{SCENARIOS_DIR, smoke_scenario};
+use evallerina::scenario::{SCENARIOS_DIR, live_scenario_by_name, live_scenarios, smoke_scenario};
+
+/// Default per-run wall-clock budget for the live rotation, minutes.
+const DEFAULT_BUDGET_MINS: u64 = 20;
 
 /// Evals with an avatar — measuring whether agents actually use the tools.
 #[derive(Parser)]
@@ -27,9 +32,11 @@ struct Cli {
 enum Command {
     /// Run the tier-1 smoke replay (no model, no network). Exit 0 iff green.
     Smoke,
-    /// Tier-2 live model run (requires OPENROUTER_API_KEY).
+    /// Tier-2 live rotation (requires OPENROUTER_API_KEY). One JSON
+    /// event per cell on stdout: a report_version 1 trial row, or an
+    /// absent record when the per-run budget skipped the cell.
     Live {
-        /// Optional scenario name filter.
+        /// Optional scenario name filter (default: the whole live battery).
         #[arg(default_value = None)]
         scenario: Option<String>,
         /// Repetitions per scenario × model cell.
@@ -38,6 +45,10 @@ enum Command {
         /// Run only this model id (default: the whole registry, in order).
         #[arg(long, default_value = None)]
         model: Option<String>,
+        /// Per-run wall-clock budget, minutes; cells not started before
+        /// it expires are recorded absent, never failed.
+        #[arg(long, default_value_t = DEFAULT_BUDGET_MINS)]
+        budget_mins: u64,
     },
 }
 
@@ -62,10 +73,11 @@ fn main() -> std::process::ExitCode {
             }
         }
         Command::Live {
-            scenario: _,
+            scenario,
             reps,
             model,
-        } => match run_live(reps, model) {
+            budget_mins,
+        } => match run_live(scenario, reps, model, budget_mins) {
             Ok(code) => code,
             Err(msg) => {
                 eprintln!("{msg}");
@@ -75,33 +87,54 @@ fn main() -> std::process::ExitCode {
     }
 }
 
-/// Tier-2 live cell run: the smoke scenario × selected models × reps,
-/// in registry order. One report row per trial, one JSON line each.
-/// Exit 0 iff every trial passed.
-fn run_live(reps: u32, model: Option<String>) -> Result<ExitCode, String> {
-    let scenario = smoke_scenario();
+/// Tier-2 live rotation: the scenario battery (or one named scenario)
+/// × selected models × reps, in registry order, under a per-run
+/// wall-clock budget. One JSON event per cell on stdout — a
+/// report_version 1 trial row or an absent record. Exit nonzero iff a
+/// trial failed or malformed; rate-limited and budget-skipped cells are
+/// recorded in their rows, they are not failures (the row is the
+/// record).
+fn run_live(
+    scenario: Option<String>,
+    reps: u32,
+    model: Option<String>,
+    budget_mins: u64,
+) -> Result<ExitCode, String> {
+    let scenarios: Vec<_> = match scenario {
+        Some(name) => vec![live_scenario_by_name(&name)?],
+        None => live_scenarios(),
+    };
     let models: Vec<String> = match model {
         Some(id) => vec![id],
         None => ordered_ids().into_iter().map(String::from).collect(),
     };
-    let mut all_passed = true;
-    for m in &models {
-        let mut transport = OpenRouterTransport::from_env(m)?;
-        for rep in 0..reps {
-            let report = evallerina::live::run_trial(
-                &scenario,
-                m,
-                rep,
-                &mut transport,
-                &evallerina::live::Bounds::default(),
-            )?;
-            all_passed &= report.status == evallerina::live::TrialStatus::Passed;
-            println!("{}", serde_json::to_string(&report).unwrap());
+    let start = Instant::now();
+    let budget = Duration::from_secs(budget_mins * 60);
+    let mut factory = |m: &str| {
+        OpenRouterTransport::from_env(m)
+            .map(|t| Box::new(t) as Box<dyn evallerina::live::Transport>)
+    };
+    let events = run_rotation(
+        &scenarios,
+        &models,
+        reps,
+        &mut factory,
+        &evallerina::live::Bounds::default(),
+        &|| start.elapsed() < budget,
+    )?;
+    let mut trial_failed = false;
+    for event in &events {
+        if let RotationEvent::Trial { report } = event {
+            trial_failed |= matches!(
+                report.status,
+                TrialStatus::Failed | TrialStatus::InvalidOutput
+            );
         }
+        println!("{}", serde_json::to_string(event).unwrap());
     }
-    if all_passed {
-        Ok(ExitCode::SUCCESS)
-    } else {
+    if trial_failed {
         Ok(ExitCode::FAILURE)
+    } else {
+        Ok(ExitCode::SUCCESS)
     }
 }

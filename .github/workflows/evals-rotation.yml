@@ -1,22 +1,32 @@
-# Tier-2 scheduled rotation scaffold (scenario × model cells).
+# Tier-2 scheduled rotation (scenario × model cells).
 #
 # Split out of evallerina-5ap (the rotation workflow is evallerina-aay).
-# This file is the scheduling/budget shell only: the live runner it
-# invokes is built by evallerina-1vw (src/live.rs — OpenRouter :free
-# action protocol). The workflow stays dormant (manual dispatch only)
-# until the runner exists, and live runs NEVER gate a push.
+# The live runner it invokes landed with evallerina-1vw (src/live.rs —
+# OpenRouter :free action protocol); this workflow iterates the ordered
+# model registry (:free ids first) × the live scenario battery and
+# prints one JSON event per cell: a report_version 1 trial row, or an
+# absent record when the per-run wall-clock budget skipped the cell.
+# Live runs NEVER gate a push (schedule + manual dispatch only).
 #
 # Budget rules per evals-ci.md: :free ids first, marginal cost ~zero USD;
-# a per-run wall-clock budget applies — cells skipped past the window are
-# recorded as absent, not failed. 429 semantics (one >=2s retry, then
-# rate_limited, never silent model substitution) live in the runner.
+# a per-run wall-clock budget applies (--budget-mins) — cells skipped
+# past the window are recorded as absent, not failed. 429 semantics
+# (one >=2s retry, then rate_limited, never silent model substitution)
+# live in the runner. Requires the OPENROUTER_API_KEY repo secret;
+# without it the run fails loudly (no silent degradation).
 
 name: evals-rotation
 
 on:
   workflow_dispatch: {}
-  # Scheduled rotation enables here once the live runner lands
-  # (evallerina-1vw): cron: "0 4 * * *" — after the tier-1 replay window.
+  # Weekly rotation (7-day cycle, within the <=14-day budget): Monday
+  # 04:00 UTC — after the tier-1 replay window (0 3 * * *).
+  schedule:
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: evals-rotation
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,14 +34,37 @@ env:
 
 jobs:
   rotation:
-    name: Tier 2 — live rotation (dormant until evallerina-1vw)
+    name: Tier 2 — live rotation (scenario × model cells)
     runs-on: ubuntu-latest
+    # Job ceiling 30 min vs --budget-mins 20: the slack lets the runner
+    # finish the trial in flight and record every skipped cell absent.
     timeout-minutes: 30
 
     steps:
-      - name: Runner not yet implemented
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The eval targets themselves, pinned to released tags: the
+      # trials execute the tools, so the runner needs them on PATH.
+      - name: Install eval targets (wai, dont)
         run: |
-          echo "Tier-2 rotation is scaffolded but dormant: the live runner"
-          echo "(src/live.rs, OpenRouter :free action protocol) is built by"
-          echo "evallerina-1vw. Enable the schedule cron at that point."
-          exit 1
+          cargo install --locked --git https://github.com/charly-vibes/wai --tag v2026.10.9
+          cargo install --locked --git https://github.com/charly-vibes/dont --tag v0.4.0
+
+      - name: Run tier-2 rotation
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          mkdir -p reports
+          cargo run --release -- live --budget-mins 20 \
+            | tee -a reports/tier2-rotation.jsonl
+
+      - name: Upload rotation rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier2-rotation
+          path: reports/tier2-rotation.jsonl

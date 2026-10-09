@@ -14,9 +14,14 @@ tier0:
 tier1:
     cargo test --test evals_replay -- --nocapture
 
-# Tier 2 — live model runs (requires OPENROUTER_API_KEY); never gates a push
-tier2 model="deepseek/deepseek-v4-flash:free" scenario="":
-    OPENROUTER_MODEL="{{model}}" cargo run --release -- live {{scenario}}
+# Tier 2 — live rotation (requires OPENROUTER_API_KEY); never gates a push.
+# One JSON event per cell on stdout (trial row or absent record).
+tier2 model="deepseek/deepseek-v4-flash:free" scenario="" budget="20":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=(live --model "{{model}}" --budget-mins "{{budget}}")
+    if [ -n "{{scenario}}" ]; then args+=("{{scenario}}"); fi
+    cargo run --release -- "${args[@]}"
 
 # Build + test the harness crate
 ci: tier0

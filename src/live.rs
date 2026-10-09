@@ -38,6 +38,11 @@ use std::time::{Duration, Instant};
 /// within a version; breaking changes bump this.
 pub const REPORT_VERSION: u32 = 1;
 
+/// Per-model transport builder for rotations: one transport per model
+/// cell (the production adapter binds a single model id for its
+/// lifetime).
+pub type TransportFactory<'a> = &'a mut dyn FnMut(&str) -> Result<Box<dyn Transport>, String>;
+
 /// Applied bounds for a trial (evals-guidelines: bounded live trials).
 #[derive(Debug, Clone, Serialize)]
 pub struct Bounds {
@@ -146,8 +151,33 @@ pub struct CheckRow {
     pub reason: Option<String>,
 }
 
+/// One event of a rotation run over the registry: either a completed
+/// trial report row, or an absent record for a cell the per-run
+/// wall-clock budget skipped (evals-guidelines: skipped cells are
+/// recorded as absent, never failed, never silently dropped).
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RotationEvent {
+    /// A trial ran; carries the full report_version 1 row.
+    Trial {
+        /// The trial's report row.
+        #[serde(flatten)]
+        report: Box<TrialReport>,
+    },
+    /// A trial did not run: the per-run budget was exhausted before it
+    /// could start. No fault attribution; the row is the record.
+    Absent {
+        /// Scenario name.
+        scenario: String,
+        /// Raw model id, verbatim including `:free`.
+        model: String,
+        /// 0-based repetition index that was skipped.
+        repetition: u32,
+    },
+}
+
 /// A tier-2 trial report row (report_version 1).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TrialReport {
     /// Report shape version.
     pub report_version: u32,
@@ -188,7 +218,7 @@ pub struct TrialReport {
 }
 
 /// Applied sandbox isolation for a trial.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SandboxReport {
     /// Isolated HOME directory was used.
     pub isolated_home: bool,
@@ -611,6 +641,48 @@ pub fn run_trial(
         },
         token_estimate: estimate_tokens(traffic_chars),
     })
+}
+
+/// Run a rotation over scenario × model cells: the model registry stays
+/// the outer loop (in scheduling order, so `:free` ids run first across
+/// the whole scenario set), every scenario × repetition is a live trial
+/// — unless the per-run budget is exhausted first, in which case the
+/// remaining trials are recorded as [`RotationEvent::Absent`] (never
+/// failed, never dropped). A transport-factory error aborts the whole
+/// rotation loudly. The budget is a closure (checked before each trial)
+/// so callers can enforce any per-run policy and tests stay
+/// deterministic.
+pub fn run_rotation(
+    scenarios: &[Scenario],
+    models: &[String],
+    reps: u32,
+    transport_factory: TransportFactory<'_>,
+    bounds: &Bounds,
+    budget_remaining: &dyn Fn() -> bool,
+) -> Result<Vec<RotationEvent>, String> {
+    let mut events = Vec::new();
+    for model in models {
+        // One transport per model cell: the production adapter binds a
+        // single model id for its lifetime.
+        let mut transport = transport_factory(model)?;
+        for scenario in scenarios {
+            for repetition in 0..reps {
+                if !budget_remaining() {
+                    events.push(RotationEvent::Absent {
+                        scenario: scenario.name.clone(),
+                        model: model.clone(),
+                        repetition,
+                    });
+                    continue;
+                }
+                let report = run_trial(scenario, model, repetition, &mut *transport, bounds)?;
+                events.push(RotationEvent::Trial {
+                    report: Box::new(report),
+                });
+            }
+        }
+    }
+    Ok(events)
 }
 
 fn write_fixture_file(root: &std::path::Path, path: &str, content: &str) -> Result<(), String> {

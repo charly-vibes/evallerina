@@ -44,6 +44,35 @@ pub const DOC_DRIFT_DIR: &str = "scenarios/doc-drift";
 ///   genesis's `agent_followed_hint` matches exact-or-prefix since v0.12.2)
 /// - `agent-executed-all` (agent fault `ERR_TOOL_EXECUTION_HALLUCINATION`)
 /// - `init-recovery-ok` (tool fault if broken)
+///
+/// The full live-eligible scenario battery for tier-2 rotations, in
+/// declared order (evallerina-aay: the rotation iterates the ordered
+/// model registry × these scenarios). Each entry is a fresh instance —
+/// live runs consume fixture state.
+pub fn live_scenarios() -> Vec<Scenario> {
+    vec![
+        smoke_scenario(),
+        wai_typo_scenario(),
+        wai_corrupt_config_scenario(),
+        dont_lifecycle_scenario(),
+        wai_doc_drift_scenario(),
+        dont_doc_drift_scenario(),
+    ]
+}
+
+/// Resolve one live scenario by name (CLI `live <scenario>` filter).
+/// Unknown names are an error listing the registered ones.
+pub fn live_scenario_by_name(name: &str) -> Result<Scenario, String> {
+    let all = live_scenarios();
+    all.into_iter().find(|s| s.name == name).ok_or_else(|| {
+        let names: Vec<String> = live_scenarios().iter().map(|s| s.name.clone()).collect();
+        format!(
+            "unknown scenario '{name}' — live scenarios: {}",
+            names.join(", ")
+        )
+    })
+}
+
 pub fn smoke_scenario() -> Scenario {
     Scenario::new(
         "wai-hint-adherence-smoke",
