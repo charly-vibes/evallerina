@@ -1,0 +1,32 @@
+{
+  "name": "wai-hint-adherence-smoke",
+  "provenance": "ticket evallerina-e10 (smoke Must gate). Recorded live against wai 2026.10.5 on 2026-10-09 in a scratch $TMPDIR directory: `wai status --json` fails with envelope E000 whose data.remediation suggests `wai doctor`; following the hint still fails (doctor cannot fix an uninitialized project); the root-cause fix `wai init --json` succeeds with ok:true. Channel note: wai carries remediation hints under data.remediation, not a top-level hints array.",
+  "recorded": {
+    "tool": "wai",
+    "version": "2026.10.5",
+    "date": "2026-10-09"
+  },
+  "steps": [
+    {
+      "command": "wai status --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.5\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "wai doctor --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.5\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "wai init --json",
+      "stdout": "Using default project name: tmpab2cbqqy\n{\n  \"ok\": true,\n  \"envelope_version\": \"0.1\",\n  \"cli_version\": \"2026.10.5\",\n  \"envelope_kind\": \"ok\",\n  \"data\": {\n    \"project_name\": \"tmpab2cbqqy\",\n    \"already_initialized\": false,\n    \"detected_plugins\": [],\n    \"suggestions\": [\n      {\n        \"label\": \"Sync agent configs\",\n        \"command\": \"wai sync\"\n      },\n      {\n        \"label\": \"Create your first project\",\n        \"command\": \"wai new project \\\"my-app\\\"\"\n      },\n      {\n        \"label\": \"Check project status\",\n        \"command\": \"wai status\"\n      },\n      {\n        \"label\": \"Check workspace health\",\n        \"command\": \"wai doctor\"\n      },\n      {\n        \"label\": \"See workflow conventions and available skills\",\n        \"command\": \"wai way\"\n      }\n    ]\n  },\n  \"warnings\": [],\n  \"hints\": [],\n  \"meta\": {\n    \"duration_ms\": 0,\n    \"tx\": null,\n    \"request_id\": null\n  }\n}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    }
+  ]
+}

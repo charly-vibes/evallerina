@@ -1,0 +1,5 @@
+# Fetch git dependencies (genesis-vibes) via the git CLI instead of
+# libgit2, so URL rewrites and SSH config from ~/.ssh/config are honored
+# in dev environments; CI (plain https) is unaffected.
+[net]
+git-fetch-with-cli = true

@@ -48,7 +48,9 @@ reports/         # tier-2 report rows, report_version JSON contract
 
 ## Status
 
-Scaffold phase. Roadmap tracked in beads (`bd ready`).
+Harness crate scaffolded (tier 0/1): `just tier0` runs fmt/clippy/test, `just tier1`
+replays the recorded wai smoke trajectory, `just smoke` prints the serialized report.
+Tier-2 live runner is tracked in beads (`bd ready`).
 
 ## Related
 
