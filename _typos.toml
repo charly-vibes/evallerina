@@ -1,0 +1,14 @@
+# Typos config (typos-cli). Fallbacks for domain vocabulary that trips the
+# default dictionary. Keep minimal — add only on a confirmed false positive.
+[default]
+extend-ignore-identifiers-re = [
+  # genesis/dulce-de-leche vocabulary
+  "vampiro",
+  "pretender",
+]
+
+[files]
+extend-exclude = [
+  ".beads/",
+  "scenarios/",
+]

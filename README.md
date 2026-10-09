@@ -2,6 +2,8 @@
 
 > *Evals with an avatar — measuring whether agents actually use the tools.*
 
+[![tracked with wai](https://img.shields.io/badge/tracked%20with-wai-blue)](https://github.com/charly-vibes/wai)
+
 Consumer eval battery for the **dulce-de-leche tool family** (the charly-vibes
 CLI suite built on [genesis-vibes](https://github.com/charly-vibes/genesis)).
 evallerina answers one question empirically: **do LLM agents read, parse, and act
