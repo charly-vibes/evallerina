@@ -11,7 +11,6 @@
 use evallerina::live::{
     Bounds, Message, RotationEvent, Transport, TransportError, TrialStatus, run_rotation, run_trial,
 };
-use evallerina::scenario::smoke_scenario;
 use genesis::evals::Scenario;
 
 /// A transport that replays scripted completions in order.
