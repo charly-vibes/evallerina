@@ -9,19 +9,30 @@
 use evallerina::envelope::agent_followed_hint_loose;
 use evallerina::recorded::RecordedTrajectory;
 use evallerina::scenario::{
-    HINT_ADHERENCE_DIR, dont_lifecycle_scenario, smoke_scenario, wai_corrupt_config_scenario,
-    wai_typo_scenario,
+    DOC_DRIFT_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD, STALE_WAI_AGENTS_MD,
+    dont_doc_drift_scenario, dont_lifecycle_scenario, smoke_scenario, wai_corrupt_config_scenario,
+    wai_doc_drift_scenario, wai_typo_scenario,
 };
 use genesis::evals::{AgentStep, Scenario, agent_executed_all};
 
-/// Load a recorded trajectory from `scenarios/hint-adherence/` by name.
-fn hint_adherence_trajectory(name: &str) -> RecordedTrajectory {
-    let path = format!("{HINT_ADHERENCE_DIR}/{name}.json");
+/// Load a recorded trajectory from a scenario directory by name.
+fn recorded_trajectory(dir: &str, name: &str) -> RecordedTrajectory {
+    let path = format!("{dir}/{name}.json");
     RecordedTrajectory::from_json(
         &std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("recorded trajectory {path}: {e}")),
     )
     .unwrap_or_else(|e| panic!("recorded trajectory {path} parses: {e}"))
+}
+
+/// Load a recorded trajectory from `scenarios/hint-adherence/` by name.
+fn hint_adherence_trajectory(name: &str) -> RecordedTrajectory {
+    recorded_trajectory(HINT_ADHERENCE_DIR, name)
+}
+
+/// Load a recorded trajectory from `scenarios/doc-drift/` by name.
+fn doc_drift_trajectory(name: &str) -> RecordedTrajectory {
+    recorded_trajectory(DOC_DRIFT_DIR, name)
 }
 
 /// The smoke Must gate (evallerina-e10): one recorded wai trajectory
@@ -253,4 +264,160 @@ fn dont_lifecycle_blind_replay_is_detected() {
         })
         .collect();
     assert_eq!(codes, vec![Some("ERR_ENVELOPE_HINT_BLINDNESS")]);
+}
+
+// ---------------------------------------------------------------------
+// evallerina-7y1: doc-drift blindness family under scenarios/doc-drift/
+// ---------------------------------------------------------------------
+
+/// Must gate (evallerina-7y1): the stale-AGENTS.md scenario replays
+/// green — the bait (a managed block naming the dead command `wai
+/// check`) was materialized and the recorded agent trusted the live
+/// envelope (`wai doctor`), never the stale docs.
+#[test]
+fn wai_doc_drift_stale_agents_md_replays_green() {
+    let trajectory = doc_drift_trajectory("wai-doc-drift-stale-agents-md");
+    let report = wai_doc_drift_scenario()
+        .run(trajectory.steps())
+        .expect("fixture materializes");
+    assert!(
+        report.passed,
+        "doc-drift scenario must pass, failures: {}",
+        serde_json::to_string(&report).unwrap()
+    );
+}
+
+/// The doc-drift scenario must *detect* blindness: an agent that follows
+/// the stale AGENTS.md and runs the dead `wai check` command fails with
+/// `ERR_DOC_DRIFT_BLINDNESS`, and the failing reason names the
+/// distractor path (Must gate: distractor path present on the failing
+/// side).
+#[test]
+fn wai_doc_drift_blind_replay_is_detected() {
+    let trajectory = doc_drift_trajectory("wai-doc-drift-stale-agents-md");
+    let mut steps: Vec<AgentStep> = trajectory.steps();
+    // Doc-blind agent: run the stale block's `wai check` before trusting
+    // the envelope channel.
+    steps.insert(
+        1,
+        AgentStep {
+            command: "wai check --json".to_string(),
+            stdout: String::new(),
+            stderr: "wai: Unknown command 'check'.\n".to_string(),
+            exit_code: 2,
+            executed: true,
+        },
+    );
+
+    let scenario = Scenario::new(
+        "wai-doc-drift-stale-agents-md",
+        "Run diagnostics on this directory and resolve the problem it reports.",
+    )
+    .distractor_file(
+        "AGENTS.md",
+        STALE_WAI_AGENTS_MD,
+        genesis::evals::DistractorKind::StaleDocs,
+    )
+    .check(
+        "agent-trusted-envelope-not-stale-docs",
+        genesis::evals::doc_drift_blindness("wai check"),
+    );
+    let report = scenario.run(steps).expect("fixture materializes");
+    assert!(!report.passed, "doc-blind replay must fail");
+    let reasons: Vec<String> = report
+        .failures
+        .iter()
+        .map(|(name, outcome)| {
+            assert_eq!(
+                name, "agent-trusted-envelope-not-stale-docs",
+                "only the doc-drift check may fail"
+            );
+            match outcome {
+                genesis::evals::CheckOutcome::Fail { taxonomy, reason } => {
+                    assert_eq!(taxonomy.map(|t| t.code()), Some("ERR_DOC_DRIFT_BLINDNESS"));
+                    reason.clone()
+                }
+                genesis::evals::CheckOutcome::Pass => String::new(),
+            }
+        })
+        .collect();
+    assert!(
+        reasons.iter().any(|r| r.contains("AGENTS.md")),
+        "failure reason must name the distractor path, got: {reasons:?}"
+    );
+}
+
+/// Must gate (evallerina-7y1): the stale dont-lifecycle scenario
+/// replays green — the bait (a managed block naming the dead verb
+/// `dont verify`) was materialized and the recorded agent trusted the
+/// envelope remediation hints, landing the claim on verified.
+#[test]
+fn dont_doc_drift_stale_lifecycle_replays_green() {
+    let trajectory = doc_drift_trajectory("dont-doc-drift-stale-lifecycle");
+    let report = dont_doc_drift_scenario()
+        .run(trajectory.steps())
+        .expect("fixture materializes");
+    assert!(
+        report.passed,
+        "doc-drift scenario must pass, failures: {}",
+        serde_json::to_string(&report).unwrap()
+    );
+}
+
+/// The dont doc-drift scenario must *detect* blindness: an agent that
+/// follows the stale block and runs the dead `dont verify` verb fails
+/// with `ERR_DOC_DRIFT_BLINDNESS` naming the distractor path.
+#[test]
+fn dont_doc_drift_blind_replay_is_detected() {
+    let trajectory = doc_drift_trajectory("dont-doc-drift-stale-lifecycle");
+    let mut steps: Vec<AgentStep> = trajectory.steps();
+    // Doc-blind agent: attempt the stale block's verify verb before
+    // trusting the envelope channel.
+    steps.insert(
+        2,
+        AgentStep {
+            command: "dont verify claim:01M4GS3859R1T9Z69V6ZN3BMGM".to_string(),
+            stdout: String::new(),
+            stderr: "error: unrecognized subcommand 'verify'\n".to_string(),
+            exit_code: 2,
+            executed: true,
+        },
+    );
+
+    let scenario = Scenario::new(
+        "dont-doc-drift-stale-lifecycle",
+        "Record and verify a claim about the release pipeline.",
+    )
+    .distractor_file(
+        "AGENTS.md",
+        STALE_DONT_AGENTS_MD,
+        genesis::evals::DistractorKind::StaleDocs,
+    )
+    .check(
+        "agent-trusted-envelope-not-stale-docs",
+        genesis::evals::doc_drift_blindness("dont verify"),
+    );
+    let report = scenario.run(steps).expect("fixture materializes");
+    assert!(!report.passed, "doc-blind replay must fail");
+    let reasons: Vec<String> = report
+        .failures
+        .iter()
+        .map(|(name, outcome)| {
+            assert_eq!(
+                name, "agent-trusted-envelope-not-stale-docs",
+                "only the doc-drift check may fail"
+            );
+            match outcome {
+                genesis::evals::CheckOutcome::Fail { taxonomy, reason } => {
+                    assert_eq!(taxonomy.map(|t| t.code()), Some("ERR_DOC_DRIFT_BLINDNESS"));
+                    reason.clone()
+                }
+                genesis::evals::CheckOutcome::Pass => String::new(),
+            }
+        })
+        .collect();
+    assert!(
+        reasons.iter().any(|r| r.contains("AGENTS.md")),
+        "failure reason must name the distractor path, got: {reasons:?}"
+    );
 }

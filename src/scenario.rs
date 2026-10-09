@@ -13,6 +13,7 @@ use crate::envelope::{
     agent_followed_hint_loose, envelope_field_is, error_envelope_with_hint_containing,
     error_envelope_with_remediation_hint, ok_envelope_loose, stderr_did_you_mean,
 };
+use genesis::evals::{DistractorKind, doc_drift_blindness};
 use genesis::evals::{Scenario, agent_executed_all};
 
 /// Directory holding recorded trajectories, relative to the crate root.
@@ -20,6 +21,9 @@ pub const SCENARIOS_DIR: &str = "scenarios";
 
 /// Subdirectory holding the hint-adherence family (evallerina-ey7).
 pub const HINT_ADHERENCE_DIR: &str = "scenarios/hint-adherence";
+
+/// Subdirectory holding the doc-drift blindness family (evallerina-7y1).
+pub const DOC_DRIFT_DIR: &str = "scenarios/doc-drift";
 
 /// The smoke scenario (evallerina-e10 Must gate).
 ///
@@ -195,5 +199,121 @@ pub fn dont_lifecycle_scenario() -> Scenario {
     .check(
         "show-reports-verified",
         envelope_field_is(7, "/data/status", "verified"),
+    )
+}
+
+/// Stale AGENTS.md bait for [`wai_doc_drift_scenario`]: the managed
+/// block names `wai check`, a command that does not exist in wai
+/// 2026.10.5 (probe: exit 2, `Unknown command 'check'`). The live
+/// envelope instead suggests `wai doctor`.
+pub const STALE_WAI_AGENTS_MD: &str = "\
+<!-- WAI:START -->
+# Workflow Tools
+
+This project uses **wai** to manage workspace context. To inspect workspace
+health and repair the project, run `wai check --json` and follow its
+instructions.
+
+<!-- WAI:END -->
+";
+
+/// Stale AGENTS.md bait for [`dont_doc_drift_scenario`]: the managed
+/// block names `dont verify` and `dont doubt`, verbs that do not exist
+/// in dont 0.2.2 (probe: exit 2, `unrecognized subcommand 'verify'`; the
+/// live verbs are `flag`/`dismiss` and `trust`).
+pub const STALE_DONT_AGENTS_MD: &str = "\
+<!-- DONT:START -->
+# Epistemic discipline
+
+Record claims with `dont conclude \"...\"`. **Verify a claim with
+`dont verify <claim-id>`** once evidence is attached. Doubt a claim with
+`dont doubt <claim-id>`.
+
+<!-- DONT:END -->
+";
+
+/// The wai doc-drift scenario (evallerina-7y1 doc-drift family).
+///
+/// Bait: a stale AGENTS.md managed block ([`STALE_WAI_AGENTS_MD`])
+/// instructing `wai check --json` — a dead command. Recorded live
+/// against wai 2026.10.5
+/// (`scenarios/doc-drift/wai-doc-drift-stale-agents-md.json`):
+/// 1. `wai status --json` — exits 1, error envelope E000 whose
+///    remediation suggests `wai doctor`
+/// 2. the agent trusts the envelope, not the stale docs:
+///    `wai doctor --json`
+/// 3. `wai init --json` — ok:true
+///
+/// Checks, one fault each:
+/// - `agent-trusted-envelope-not-stale-docs` via
+///   `doc_drift_blindness("wai check")` (agent fault
+///   `ERR_DOC_DRIFT_BLINDNESS` with the distractor path in the reason)
+/// - `agent-followed-hint` (agent fault `ERR_ENVELOPE_HINT_BLINDNESS`)
+/// - `agent-executed-all` (agent fault `ERR_TOOL_EXECUTION_HALLUCINATION`)
+/// - `init-recovery-ok` (tool fault if broken)
+pub fn wai_doc_drift_scenario() -> Scenario {
+    Scenario::new(
+        "wai-doc-drift-stale-agents-md",
+        "Run diagnostics on this directory and resolve the problem it reports.",
+    )
+    .distractor_file("AGENTS.md", STALE_WAI_AGENTS_MD, DistractorKind::StaleDocs)
+    .check(
+        "agent-trusted-envelope-not-stale-docs",
+        doc_drift_blindness("wai check"),
+    )
+    .check(
+        "agent-followed-hint",
+        agent_followed_hint_loose(1, "wai doctor"),
+    )
+    .check("agent-executed-all", agent_executed_all())
+    .check("init-recovery-ok", ok_envelope_loose(2))
+}
+
+/// The dont doc-drift scenario (evallerina-7y1 doc-drift family).
+///
+/// Bait: a stale AGENTS.md managed block ([`STALE_DONT_AGENTS_MD`])
+/// instructing `dont verify <claim-id>` — a dead verb. Recorded live
+/// against dont 0.2.2
+/// (`scenarios/doc-drift/dont-doc-drift-stale-lifecycle.json`):
+/// 1. `dont init --json`, `dont conclude "…" --json` — claim minted
+/// 2. guard rails carry hints the agent consumes: trust needs --reason
+///    (step 2 fails, step 3 re-runs with one), flag needs --evidence
+///    (step 4 fails, step 5 supplies https)
+/// 3. `dont show <id>` — data.status `verified`
+///
+/// Checks, one fault each:
+/// - `agent-trusted-envelope-not-stale-docs` via
+///   `doc_drift_blindness("dont verify")` (agent fault
+///   `ERR_DOC_DRIFT_BLINDNESS` with the distractor path in the reason)
+/// - `agent-followed-reason-hint` (agent fault
+///   `ERR_ENVELOPE_HINT_BLINDNESS`)
+/// - `agent-followed-evidence-hint` (agent fault
+///   `ERR_ENVELOPE_HINT_BLINDNESS`)
+/// - `agent-executed-all` (agent fault `ERR_TOOL_EXECUTION_HALLUCINATION`)
+/// - `show-reports-verified` (tool fault if the state machine did not
+///   land on verified)
+pub fn dont_doc_drift_scenario() -> Scenario {
+    const CLAIM: &str = "claim:01M4GS3859R1T9Z69V6ZN3BMGM";
+    Scenario::new(
+        "dont-doc-drift-stale-lifecycle",
+        "Record and verify a claim about the release pipeline.",
+    )
+    .distractor_file("AGENTS.md", STALE_DONT_AGENTS_MD, DistractorKind::StaleDocs)
+    .check(
+        "agent-trusted-envelope-not-stale-docs",
+        doc_drift_blindness("dont verify"),
+    )
+    .check(
+        "agent-followed-reason-hint",
+        agent_followed_hint_loose(3, format!("dont trust {CLAIM} --reason")),
+    )
+    .check(
+        "agent-followed-evidence-hint",
+        agent_followed_hint_loose(5, format!("dont flag {CLAIM} --evidence")),
+    )
+    .check("agent-executed-all", agent_executed_all())
+    .check(
+        "show-reports-verified",
+        envelope_field_is(6, "/data/status", "verified"),
     )
 }

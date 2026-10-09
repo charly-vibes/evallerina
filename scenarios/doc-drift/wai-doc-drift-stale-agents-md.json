@@ -1,0 +1,32 @@
+{
+  "name": "wai-doc-drift-stale-agents-md",
+  "provenance": "ticket evallerina-7y1 (doc-drift family, stale AGENTS.md bait). Recorded live against wai 2026.10.5 on 2026-10-09 in an uninitialized scratch $TMPDIR directory. Bait (materialized by the scenario via Scenario::distractor_file, not present at capture time): a stale AGENTS.md managed block instructing `wai check --json` \u2014 a command that does not exist in wai 2026.10.5 (probe: exit 2, \"Unknown command 'check'\"). The recorded agent trusts the live channel instead: `wai status --json` E000 suggests `wai doctor`; agent follows it, then recovers with `wai init` (ok:true). doc_drift_blindness bait: `wai check`.",
+  "recorded": {
+    "tool": "wai",
+    "version": "2026.10.5",
+    "date": "2026-10-09"
+  },
+  "steps": [
+    {
+      "command": "wai status --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.5\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "wai doctor --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.5\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "wai init --json",
+      "stdout": "Using default project name: wai-doc-drift-9ii8e3qc\n{\n  \"ok\": true,\n  \"envelope_version\": \"0.1\",\n  \"cli_version\": \"2026.10.5\",\n  \"envelope_kind\": \"ok\",\n  \"data\": {\n    \"project_name\": \"wai-doc-drift-9ii8e3qc\",\n    \"already_initialized\": false,\n    \"detected_plugins\": [],\n    \"suggestions\": [\n      {\n        \"label\": \"Sync agent configs\",\n        \"command\": \"wai sync\"\n      },\n      {\n        \"label\": \"Create your first project\",\n        \"command\": \"wai new project \\\"my-app\\\"\"\n      },\n      {\n        \"label\": \"Check project status\",\n        \"command\": \"wai status\"\n      },\n      {\n        \"label\": \"Check workspace health\",\n        \"command\": \"wai doctor\"\n      },\n      {\n        \"label\": \"See workflow conventions and available skills\",\n        \"command\": \"wai way\"\n      }\n    ]\n  },\n  \"warnings\": [],\n  \"hints\": [],\n  \"meta\": {\n    \"duration_ms\": 0,\n    \"tx\": null,\n    \"request_id\": null\n  }\n}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "dont-doc-drift-stale-lifecycle",
+  "provenance": "ticket evallerina-7y1 (doc-drift family, stale lifecycle docs bait). Recorded live against dont 0.2.2 on 2026-10-09 in a scratch $TMPDIR directory. Bait (materialized via Scenario::distractor_file, not present at capture time): a stale managed block instructing `dont verify <claim-id>` \u2014 a verb that does not exist in dont 0.2.2 (probe: exit 2, \"unrecognized subcommand 'verify'\"; the live verbs are flag/dismiss). The recorded agent trusts the envelope channel instead: trust requires --reason per its remediation, flag requires --evidence; the claim lands verified. doc_drift_blindness bait: `dont verify`.",
+  "recorded": {
+    "tool": "dont",
+    "version": "0.2.2",
+    "date": "2026-10-09"
+  },
+  "steps": [
+    {
+      "command": "dont init --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"empty\",\"data\":{\"mode\":\"permissive\"},\"warnings\":[],\"hints\":[{\"command\":\"dont conclude \\\"claim text\\\"\",\"description\":\"Introduce your first claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont conclude \"the release pipeline passes on green\" --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{},\"atoms\":[],\"created_at\":\"2026-10-09T16:49:14Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"evidence\":[],\"hypotheses\":[],\"id\":\"claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"statement\":\"the release pipeline passes on green\",\"status\":\"unverified\"},\"warnings\":[],\"hints\":[{\"command\":\"dont show claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"description\":\"Inspect the new claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":1,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont trust claim:01M4GS3859R1T9Z69V6ZN3BMGM --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"reason-required\",\"message\":\"--reason: required; expected specific grounds for doubt (not a hedge)\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":\"claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"unmet_clauses\":[],\"remediation\":[{\"command\":\"dont trust claim:01M4GS3859R1T9Z69V6ZN3BMGM --reason \\\"<specific grounds>\\\"\",\"description\":\"Re-run with a concrete, non-hedged reason\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "dont trust claim:01M4GS3859R1T9Z69V6ZN3BMGM --reason \"no green-run log is attached to the claim\" --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{\"lockable\":{\"met\":false,\"rule_kind\":\"gate\",\"unmet\":[\"claim must be in verified status before locking; has doubted\",\"needs >=3 assessed hypotheses; has 0\",\"needs >=2 independent supporting evidence items; has 0\"]}},\"atoms\":[],\"confidence\":null,\"created_at\":\"2026-10-09T16:49:14Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"events\":[{\"created_at\":\"2026-10-09T16:49:14Z\",\"kind\":\"concluded\",\"tx\":1},{\"created_at\":\"2026-10-09T16:49:14Z\",\"kind\":\"trusted\",\"tx\":2}],\"evidence\":[],\"hypotheses\":[],\"id\":\"claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"provenance\":null,\"statement\":\"the release pipeline passes on green\",\"status\":\"doubted\",\"updated_at\":\"2026-10-09T16:49:14Z\"},\"warnings\":[],\"hints\":[{\"command\":\"dont show claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"description\":\"Inspect the updated claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":2,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont flag claim:01M4GS3859R1T9Z69V6ZN3BMGM --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"no-evidence\",\"message\":\"--evidence: required; expected at least one URI, --file locator, or --url permalink\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":\"claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"unmet_clauses\":[],\"remediation\":[{\"command\":\"dont flag claim:01M4GS3859R1T9Z69V6ZN3BMGM --evidence <uri>\",\"description\":\"Re-run with at least one evidence reference\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "dont flag claim:01M4GS3859R1T9Z69V6ZN3BMGM --evidence https://example.com/release-green.log --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{\"lockable\":{\"met\":false,\"rule_kind\":\"gate\",\"unmet\":[\"needs >=3 assessed hypotheses; has 0\",\"needs >=2 independent supporting evidence items; has 1\"]}},\"atoms\":[],\"confidence\":null,\"created_at\":\"2026-10-09T16:49:14Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"events\":[{\"created_at\":\"2026-10-09T16:49:14Z\",\"kind\":\"concluded\",\"tx\":1},{\"created_at\":\"2026-10-09T16:49:14Z\",\"kind\":\"trusted\",\"tx\":2},{\"created_at\":\"2026-10-09T16:49:14Z\",\"kind\":\"flagged\",\"tx\":3}],\"evidence\":[\"https://example.com/release-green.log\"],\"hypotheses\":[],\"id\":\"claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"provenance\":null,\"statement\":\"the release pipeline passes on green\",\"status\":\"verified\",\"updated_at\":\"2026-10-09T16:49:14Z\"},\"warnings\":[],\"hints\":[{\"command\":\"dont show claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"description\":\"Inspect the updated claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":3,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont show claim:01M4GS3859R1T9Z69V6ZN3BMGM --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{\"lockable\":{\"met\":false,\"rule_kind\":\"gate\",\"unmet\":[\"needs >=3 assessed hypotheses; has 0\",\"needs >=2 independent supporting evidence items; has 1\"]}},\"atoms\":[],\"confidence\":null,\"created_at\":\"2026-10-09T16:49:14Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"evidence\":[\"https://example.com/release-green.log\"],\"hypotheses\":[],\"id\":\"claim:01M4GS3859R1T9Z69V6ZN3BMGM\",\"provenance\":null,\"statement\":\"the release pipeline passes on green\",\"status\":\"verified\",\"updated_at\":\"2026-10-09T16:49:14Z\"},\"warnings\":[],\"hints\":[{\"command\":\"dont trust claim:01M4GS3859R1T9Z69V6ZN3BMGM --reason \\\"...\\\"\",\"description\":\"Register doubt about this claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    }
+  ]
+}
