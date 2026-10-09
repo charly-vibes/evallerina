@@ -1,0 +1,71 @@
+# Tier-0 gate + tier-1 nightly replay for the evallerina eval battery.
+#
+# Per genesis docs/how-to/evals-ci.md:
+# - tier 0 runs on every push/PR and gates it (no model, seconds)
+# - tier 1 replays recorded transcripts nightly (no model, no network);
+#   a replay failure is a regression signal, not a flake
+# - tier 2 (live model runs) is a separate scheduled workflow
+#   (evals-rotation.yml) that never gates a push
+#
+# Uses `just ci` / `just tier1` for parity with local development.
+
+name: evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *" # nightly, off-peak
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  tier0:
+    name: Tier 0 — static gate
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Run tier 0 (fmt, clippy -D warnings, tests)
+        run: just tier0
+
+  tier1-replay:
+    name: Tier 1 — nightly replay
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Replay recorded failure modes
+        run: just tier1
