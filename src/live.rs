@@ -147,6 +147,10 @@ pub enum TrialStatus {
     /// Persistent action malformation; carries
     /// `ERR_ACTION_FORMAT_VIOLATION` as an agent fault.
     InvalidOutput,
+    /// Mid-trial HTTP transport error (auth, outage, 5xx) — the cell
+    /// ends as its own recorded row, no fault attribution, and the
+    /// remaining registry cells still run. Never aborts the rotation.
+    HttpError,
 }
 
 /// One per-check outcome in a tier-2 report row.
@@ -550,12 +554,21 @@ pub fn run_trial_with_arm(
                         terminal = Some(TrialStatus::RateLimited);
                         break;
                     }
-                    Err(TransportError::Http(e)) => {
-                        return Err(format!("transport: {e}"));
+                    Err(TransportError::Http(_e)) => {
+                        // Mid-trial HTTP error: end this cell as its own
+                        // recorded row — the remaining registry must
+                        // still run.
+                        terminal = Some(TrialStatus::HttpError);
+                        break;
                     }
                 }
             }
-            Err(TransportError::Http(e)) => return Err(format!("transport: {e}")),
+            Err(TransportError::Http(_e)) => {
+                // Mid-trial HTTP error: end this cell as its own
+                // recorded row — the remaining registry must still run.
+                terminal = Some(TrialStatus::HttpError);
+                break;
+            }
         };
         turns_used += 1;
 
@@ -616,44 +629,56 @@ pub fn run_trial_with_arm(
         }
     }
 
-    // Deterministic checks over the live replay.
-    let result = ScenarioResult {
-        steps: replay
-            .iter()
-            .map(|s| AgentStep {
-                command: s.command.clone(),
-                stdout: s.stdout.clone(),
-                stderr: s.stderr.clone(),
-                exit_code: s.exit_code,
-                executed: s.executed,
-            })
-            .collect(),
-        fixture_root: fixture_root.clone(),
-        distractors: scenario.distractors.clone(),
+    // Deterministic checks over the live replay. Trials that ended on
+    // a coverage status (rate_limited, http_error) carry no fault
+    // attribution — their checks stay empty by construction.
+    let coverage_terminal = matches!(
+        terminal,
+        Some(TrialStatus::RateLimited | TrialStatus::HttpError)
+    );
+    let result = if coverage_terminal {
+        None
+    } else {
+        Some(ScenarioResult {
+            steps: replay
+                .iter()
+                .map(|s| AgentStep {
+                    command: s.command.clone(),
+                    stdout: s.stdout.clone(),
+                    stderr: s.stderr.clone(),
+                    exit_code: s.exit_code,
+                    executed: s.executed,
+                })
+                .collect(),
+            fixture_root: fixture_root.clone(),
+            distractors: scenario.distractors.clone(),
+        })
     };
     let mut checks = Vec::new();
     let mut all_passed = true;
-    for check in &scenario.checks {
-        let outcome = (check.check)(&result);
-        let row = match outcome {
-            CheckOutcome::Pass => {
-                checks.push(CheckRow {
-                    name: check.name.clone(),
-                    passed: true,
-                    code: None,
-                    reason: None,
-                });
-                continue;
-            }
-            CheckOutcome::Fail { taxonomy, reason } => (taxonomy, reason),
-        };
-        all_passed = false;
-        checks.push(CheckRow {
-            name: check.name.clone(),
-            passed: false,
-            code: row.0.as_ref().map(ErrorTaxonomy::code),
-            reason: Some(row.1),
-        });
+    if let Some(result) = &result {
+        for check in &scenario.checks {
+            let outcome = (check.check)(result);
+            let row = match outcome {
+                CheckOutcome::Pass => {
+                    checks.push(CheckRow {
+                        name: check.name.clone(),
+                        passed: true,
+                        code: None,
+                        reason: None,
+                    });
+                    continue;
+                }
+                CheckOutcome::Fail { taxonomy, reason } => (taxonomy, reason),
+            };
+            all_passed = false;
+            checks.push(CheckRow {
+                name: check.name.clone(),
+                passed: false,
+                code: row.0.as_ref().map(ErrorTaxonomy::code),
+                reason: Some(row.1),
+            });
+        }
     }
     // A done-flag exit (no terminal status) is decided by the checks.
     let status = terminal.unwrap_or(if all_passed {

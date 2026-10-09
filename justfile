@@ -16,7 +16,7 @@ tier1:
 
 # Tier 2 — live rotation (requires OPENROUTER_API_KEY); never gates a push.
 # One JSON event per cell on stdout (trial row or absent record).
-tier2 model="deepseek/deepseek-v4-flash:free" scenario="" budget="20":
+tier2 model="openrouter/free" scenario="" budget="20":
     #!/usr/bin/env bash
     set -euo pipefail
     args=(live --model "{{model}}" --budget-mins "{{budget}}")

@@ -2,7 +2,8 @@
 //! Responsibilities: hold the checked-in ordered registry of model ids
 //! with OpenRouter `:free` ids as the default first candidates, expose
 //! them verbatim, and define the repetition policy per scenario × model
-//! cell.
+//! cell. The default first candidate is OpenRouter's free-models router
+//! (`openrouter/free`), which routes to its current free catalog.
 //! Rationale: evals-guidelines free-tier entry and attribution — the
 //! ordering defines scheduling priority (which cells run first), not
 //! failover; model fallback is a caller-level decision that must be
@@ -23,6 +24,10 @@ pub struct RegistryEntry {
 /// The checked-in ordered registry. `:free` ids first (scheduling
 /// priority), paid ids after. Nothing is special-cased beyond ordering.
 pub const REGISTRY: &[RegistryEntry] = &[
+    RegistryEntry {
+        id: "openrouter/free",
+        free: true,
+    },
     RegistryEntry {
         id: "deepseek/deepseek-v4-flash:free",
         free: true,
@@ -54,22 +59,21 @@ pub fn free_ids() -> Vec<&'static str> {
 mod tests {
     use super::*;
 
-    /// Free ids sort first and their ids are preserved verbatim,
-    /// including the `:free` suffix.
+    /// Free-tier ids sort first and their ids are preserved verbatim.
+    /// Free-tier membership is the `free` flag, not the `:free` suffix:
+    /// `openrouter/free` routes to OpenRouter's free catalog without a
+    /// suffix.
     #[test]
     fn free_ids_first_and_verbatim() {
         let ids = ordered_ids();
         let free_count = free_ids().len();
         for (i, id) in ids.iter().take(free_count).enumerate() {
             assert!(
-                id.ends_with(":free"),
-                "first {free_count} ids must be :free, position {i} is {id}"
+                free_ids().contains(&id),
+                "first {free_count} ids must be free-tier, position {i} is {id}"
             );
         }
-        assert_eq!(
-            free_ids().first().copied(),
-            Some("deepseek/deepseek-v4-flash:free")
-        );
+        assert_eq!(free_ids().first().copied(), Some("openrouter/free"));
     }
 
     /// Ids are never normalized: the registry round-trips raw strings.

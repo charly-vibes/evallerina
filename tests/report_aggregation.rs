@@ -311,6 +311,21 @@ fn rate_limited_rows_surfaced_without_fault() {
     assert!(dashboard["matrix"].as_array().unwrap().is_empty());
 }
 
+/// Mid-trial transport errors end as `http_error` rows (live.rs): they
+/// are coverage records, never faults and never single-failure exits.
+#[test]
+fn http_error_rows_surfaced_without_fault() {
+    let rows = vec![trial(
+        "wai-hint-adherence-typo",
+        "m1",
+        "http_error",
+        json!([]),
+    )];
+    let dashboard = aggregate_rows(&rows, &models(3), &test_channel_of).expect("aggregates");
+    assert_eq!(dashboard["coverage"]["http_error"], 1);
+    assert!(dashboard["matrix"].as_array().unwrap().is_empty());
+}
+
 /// Rows without model attribution group as non-tier-2 (evals-guidelines
 /// suite-wide aggregation).
 #[test]

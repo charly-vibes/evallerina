@@ -5,8 +5,8 @@
 //! per-output-channel × check-code × model-id fault matrix, apply the
 //! evals-guidelines fault routing (tool faults → tool tickets; agent
 //! faults → AIX-channel work only at the cross-model threshold),
-//! surface absent and rate_limited cells as coverage records — never
-//! failures, never dropped — and refuse loudly on unmappable scenarios
+//! surface absent, rate_limited, and http_error cells as coverage
+//! records — never failures, never dropped — and refuse loudly on unmappable scenarios
 //! instead of silently bucketing them.
 //! Rationale: evals-guidelines "Fault routing" and "suite-wide
 //! aggregation" requirements. The dashboard deliberately carries no
@@ -320,6 +320,7 @@ fn bump_status(coverage: &mut Coverage, status: &str) -> Result<(), String> {
         "passed" => coverage.passed += 1,
         "failed" => coverage.failed += 1,
         "rate_limited" => coverage.rate_limited += 1,
+        "http_error" => coverage.http_error += 1,
         "invalid_output" => coverage.invalid_output += 1,
         other => return Err(format!("unknown trial status '{other}'")),
     }
@@ -334,6 +335,7 @@ struct Coverage {
     passed: usize,
     failed: usize,
     rate_limited: usize,
+    http_error: usize,
     invalid_output: usize,
     absent: usize,
     non_tier2: usize,
@@ -347,6 +349,7 @@ fn coverage_json(coverage: &Coverage) -> serde_json::Value {
         "passed": coverage.passed,
         "failed": coverage.failed,
         "rate_limited": coverage.rate_limited,
+        "http_error": coverage.http_error,
         "invalid_output": coverage.invalid_output,
         "absent": coverage.absent,
         "non_tier2": coverage.non_tier2,

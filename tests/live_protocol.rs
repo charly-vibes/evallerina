@@ -115,7 +115,7 @@ fn rotation_runs_whole_registry_in_order_when_budget_open() {
     )
     .expect("rotation runs");
 
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), models.len());
     for (event, model) in events.iter().zip(&models) {
         match event {
             RotationEvent::Trial { report } => {
@@ -150,7 +150,7 @@ fn rotation_records_unstarted_cells_absent_never_failed() {
     )
     .expect("rotation runs");
 
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), models.len());
     for (event, model) in events.iter().zip(&models) {
         match event {
             RotationEvent::Trial { .. } => {
@@ -191,7 +191,7 @@ fn rotation_partial_budget_finishes_started_trial_rest_absent() {
     )
     .expect("rotation runs");
 
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), models.len());
     assert!(matches!(events[0], RotationEvent::Trial { .. }));
     assert!(
         events[1..]
@@ -219,6 +219,43 @@ fn rotation_factory_error_aborts_loudly() {
     )
     .expect_err("factory error must abort");
     assert!(err.contains("OPENROUTER_API_KEY"));
+}
+
+/// A mid-trial transport Http error (retired slug 404, auth 401, outage
+/// 5xx) ends the cell as a recorded row with no fault attribution —
+/// never an `Err` that aborts the rotation and discards every prior
+/// trial row (run 37987255771: one 404 from a retired `:free` candidate
+/// left a 0-byte artifact behind a green GHA).
+#[test]
+fn rotation_contains_mid_trial_http_error_as_row_not_abort() {
+    let mut factory = fake_factory(|| {
+        Err(TransportError::Http(
+            "http 404: model unavailable for free".into(),
+        ))
+    });
+    let scenarios = [probe_scenario()];
+    let events = run_rotation(
+        &scenarios,
+        &["dead/model:free".to_owned()],
+        2,
+        &mut factory,
+        &default_bounds(),
+        &budget_open,
+    )
+    .expect("mid-trial transport error must not abort the rotation");
+
+    let mut rows = 0;
+    for event in &events {
+        match event {
+            RotationEvent::Trial { report } => {
+                rows += 1;
+                assert_eq!(report.status, TrialStatus::HttpError);
+                assert!(report.checks.is_empty(), "no fault attribution");
+            }
+            RotationEvent::Absent { .. } => panic!("dead model records rows, not absent"),
+        }
+    }
+    assert_eq!(rows, 2, "each cell records its own row");
 }
 
 // ── action protocol ──────────────────────────────────────────────────────────

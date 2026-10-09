@@ -80,6 +80,10 @@ pub struct ArmSummary {
     pub invalid_output: usize,
     /// Trials that ended `rate_limited` (transport 429 twice).
     pub rate_limited: usize,
+    /// Trials that ended `http_error` (mid-trial transport error).
+    /// Surfaced as a coverage record — like `rate_limited`, never a
+    /// fault and never attributed to the agent or the tool.
+    pub http_error: usize,
     /// Cells the budget skipped before they could start.
     pub absent: usize,
     /// Pass rate over trials that ran; `None` when nothing ran.
@@ -200,6 +204,7 @@ fn arm_summary(arm: Arm, rows: &[RotationEvent]) -> ArmSummary {
         failed: 0,
         invalid_output: 0,
         rate_limited: 0,
+        http_error: 0,
         absent: 0,
         pass_rate: None,
     };
@@ -212,6 +217,7 @@ fn arm_summary(arm: Arm, rows: &[RotationEvent]) -> ArmSummary {
                     TrialStatus::Failed => summary.failed += 1,
                     TrialStatus::InvalidOutput => summary.invalid_output += 1,
                     TrialStatus::RateLimited => summary.rate_limited += 1,
+                    TrialStatus::HttpError => summary.http_error += 1,
                 }
             }
             RotationEvent::Absent { .. } => summary.absent += 1,
