@@ -89,9 +89,9 @@ pub fn remediation_commands(value: &Value) -> Vec<String> {
 /// agent fault.
 pub fn error_envelope_with_remediation_hint(
     step: usize,
-    suggested_command: &str,
+    suggested_command: impl Into<String>,
 ) -> impl Fn(&ScenarioResult) -> CheckOutcome {
-    let suggested = suggested_command.to_owned();
+    let suggested = suggested_command.into();
     move |result: &ScenarioResult| {
         let Some(s) = result.steps.get(step) else {
             return CheckOutcome::tool_fault(format!("no step {step} in replay"));
@@ -130,9 +130,9 @@ pub fn error_envelope_with_remediation_hint(
 /// exact-or-prefix matching `doc_drift_blindness` already uses).
 pub fn agent_followed_hint_loose(
     recovery_index: usize,
-    suggested_command: &str,
+    suggested_command: impl Into<String>,
 ) -> impl Fn(&ScenarioResult) -> CheckOutcome {
-    let suggested = suggested_command.to_owned();
+    let suggested = suggested_command.into();
     let suggested_prefix = format!("{suggested} ");
     move |result: &ScenarioResult| match result.steps.get(recovery_index) {
         Some(s) if s.command == suggested || s.command.starts_with(&suggested_prefix) => {
@@ -172,6 +172,106 @@ pub fn ok_envelope_loose(step: usize) -> impl Fn(&ScenarioResult) -> CheckOutcom
                 "step {step}: ok envelope expected, exit {}",
                 s.exit_code
             ))
+        }
+    }
+}
+
+/// Assert `steps[step]` exited nonzero and its stderr carries wai's
+/// clap-level DidYouMean hint (`Did you mean '<suggested>'?`). Tool
+/// fault otherwise. Unlike the envelope channels, the typo channel is
+/// plain stderr text with no JSON envelope — the hint string is still a
+/// deterministic tool promise, so a substring read (not prose scoring)
+/// is the process-boundary check.
+pub fn stderr_did_you_mean(
+    step: usize,
+    suggested_command: impl Into<String>,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let suggested = suggested_command.into();
+    let needle = format!("Did you mean '{suggested}'?");
+    move |result: &ScenarioResult| {
+        let Some(s) = result.steps.get(step) else {
+            return CheckOutcome::tool_fault(format!("no step {step} in replay"));
+        };
+        if s.exit_code == 0 {
+            return CheckOutcome::tool_fault(format!(
+                "step {step} exited 0; expected a failing invocation"
+            ));
+        }
+        if s.stderr.contains(&needle) {
+            CheckOutcome::pass()
+        } else {
+            CheckOutcome::tool_fault(format!("step {step} stderr lacks DidYouMean `{needle}`"))
+        }
+    }
+}
+
+/// Assert `steps[step]` exited nonzero with a parseable error envelope
+/// some of whose remediation commands *contain* `fragment`. Tool fault
+/// otherwise.
+///
+/// The substring form exists because dont's remediation commands embed
+/// placeholders (`dont trust <id> --reason "<specific grounds>"`) and
+/// capture-time literals (the minted claim id) that an agent is not
+/// expected to reproduce character-for-character; asserting the stable
+/// fragment keeps the check single-fault on hint presence.
+pub fn error_envelope_with_hint_containing(
+    step: usize,
+    fragment: impl Into<String>,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let fragment = fragment.into();
+    move |result: &ScenarioResult| {
+        let Some(s) = result.steps.get(step) else {
+            return CheckOutcome::tool_fault(format!("no step {step} in replay"));
+        };
+        if s.exit_code == 0 {
+            return CheckOutcome::tool_fault(format!(
+                "step {step} exited 0; expected a failing invocation"
+            ));
+        }
+        let value = match extract_envelope(&s.stdout) {
+            Ok(v) => v,
+            Err(e) => return CheckOutcome::tool_fault(format!("step {step}: {e}")),
+        };
+        if value.get("ok").and_then(Value::as_bool) != Some(false) {
+            return CheckOutcome::tool_fault(format!("step {step} is not an error envelope"));
+        }
+        let commands = remediation_commands(&value);
+        if commands.iter().any(|c| c.contains(&fragment)) {
+            CheckOutcome::pass()
+        } else {
+            CheckOutcome::tool_fault(format!(
+                "step {step} error envelope lacks remediation containing `{fragment}` (suggested: {commands:?})"
+            ))
+        }
+    }
+}
+
+/// Assert the envelope at `steps[step]` carries `expected` at JSON
+/// `pointer`. Tool fault otherwise (the agent cannot change what the
+/// tool reports about state it did not create).
+///
+/// Generic single-fault state read — e.g. dont's claim lifecycle lands
+/// on `data.status == "verified"` after the hint-following path.
+pub fn envelope_field_is(
+    step: usize,
+    pointer: impl Into<String>,
+    expected: &str,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let pointer = pointer.into();
+    let expected = expected.to_owned();
+    move |result: &ScenarioResult| {
+        let Some(s) = result.steps.get(step) else {
+            return CheckOutcome::tool_fault(format!("no step {step} in replay"));
+        };
+        let value = match extract_envelope(&s.stdout) {
+            Ok(v) => v,
+            Err(e) => return CheckOutcome::tool_fault(format!("step {step}: {e}")),
+        };
+        match value.pointer(&pointer).and_then(Value::as_str) {
+            Some(actual) if actual == expected => CheckOutcome::pass(),
+            other => CheckOutcome::tool_fault(format!(
+                "step {step}: expected {pointer} == `{expected}`, got {other:?}"
+            )),
         }
     }
 }

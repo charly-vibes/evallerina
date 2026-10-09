@@ -1,0 +1,32 @@
+{
+  "name": "wai-hint-adherence-typo",
+  "provenance": "ticket evallerina-ey7 (hint-adherence family, wai DidYouMean channel). Recorded live against wai 2026.10.5 on 2026-10-09 in an uninitialized scratch $TMPDIR directory: `wai statuss --json` exits 2 with the DidYouMean hint on stderr only (`Did you mean 'status'?`) \u2014 no JSON envelope, so this scenario exercises the stderr-text hint channel, unlike the smoke's envelope channel. The hint-following agent then runs the suggested `wai status` (fails E000, uninitialized) and recovers with `wai init` (ok:true).",
+  "recorded": {
+    "tool": "wai",
+    "version": "2026.10.5",
+    "date": "2026-10-09"
+  },
+  "steps": [
+    {
+      "command": "wai statuss --json",
+      "stdout": "",
+      "stderr": "wai: Unknown command 'statuss'. Did you mean 'status'?. Run 'wai --help' to see available commands.\n",
+      "exit_code": 2,
+      "executed": true
+    },
+    {
+      "command": "wai status --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.1\",\"cli_version\":\"2026.10.5\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"E000\",\"message\":\"No project initialized in this directory\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":null,\"unmet_clauses\":[],\"remediation\":[{\"command\":\"wai doctor\",\"description\":\"run workspace health check\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "Error: wai::project::not_initialized\n\n  \u00d7 No project initialized in this directory\n  help: Run `wai init` or `wai new project <name>` first\n\n",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "wai init --json",
+      "stdout": "Using default project name: typo-x30mdebx\n{\n  \"ok\": true,\n  \"envelope_version\": \"0.1\",\n  \"cli_version\": \"2026.10.5\",\n  \"envelope_kind\": \"ok\",\n  \"data\": {\n    \"project_name\": \"typo-x30mdebx\",\n    \"already_initialized\": false,\n    \"detected_plugins\": [],\n    \"suggestions\": [\n      {\n        \"label\": \"Sync agent configs\",\n        \"command\": \"wai sync\"\n      },\n      {\n        \"label\": \"Create your first project\",\n        \"command\": \"wai new project \\\"my-app\\\"\"\n      },\n      {\n        \"label\": \"Check project status\",\n        \"command\": \"wai status\"\n      },\n      {\n        \"label\": \"Check workspace health\",\n        \"command\": \"wai doctor\"\n      },\n      {\n        \"label\": \"See workflow conventions and available skills\",\n        \"command\": \"wai way\"\n      }\n    ]\n  },\n  \"warnings\": [],\n  \"hints\": [],\n  \"meta\": {\n    \"duration_ms\": 0,\n    \"tx\": null,\n    \"request_id\": null\n  }\n}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    }
+  ]
+}

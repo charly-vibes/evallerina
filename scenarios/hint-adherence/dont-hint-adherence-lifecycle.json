@@ -1,0 +1,67 @@
+{
+  "name": "dont-hint-adherence-lifecycle",
+  "provenance": "ticket evallerina-ey7 (hint-adherence family, dont claim state machine). Recorded live against dont 0.2.2 on 2026-10-09 in a scratch $TMPDIR directory: claim concluded, then the state machine's guard rails each carry a remediation hint the agent consumes \u2014 `dont trust <id>` without --reason errors (reason-required) and the agent re-runs with a concrete reason (unverified -> doubted); `dont flag <id>` without evidence errors (no-evidence); a file:// evidence URI is rejected (malformed-evidence-uri) and the agent retries with https:// per the remediation (doubted -> verified). `dont show` confirms status verified. Channel note: dont error envelopes exit 1 like wai's; the strict nonzero-exit check applies.",
+  "recorded": {
+    "tool": "dont",
+    "version": "0.2.2",
+    "date": "2026-10-09"
+  },
+  "steps": [
+    {
+      "command": "dont init --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"empty\",\"data\":{\"mode\":\"permissive\"},\"warnings\":[],\"hints\":[{\"command\":\"dont conclude \\\"claim text\\\"\",\"description\":\"Introduce your first claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont conclude \"the nightly sync completes without errors\" --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{},\"atoms\":[],\"created_at\":\"2026-10-09T16:36:04Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"evidence\":[],\"hypotheses\":[],\"id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"statement\":\"the nightly sync completes without errors\",\"status\":\"unverified\"},\"warnings\":[],\"hints\":[{\"command\":\"dont show claim:01M4GRB4M65K86K518SK38FSMQ\",\"description\":\"Inspect the new claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":1,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont trust claim:01M4GRB4M65K86K518SK38FSMQ --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"reason-required\",\"message\":\"--reason: required; expected specific grounds for doubt (not a hedge)\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"unmet_clauses\":[],\"remediation\":[{\"command\":\"dont trust claim:01M4GRB4M65K86K518SK38FSMQ --reason \\\"<specific grounds>\\\"\",\"description\":\"Re-run with a concrete, non-hedged reason\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "dont trust claim:01M4GRB4M65K86K518SK38FSMQ --reason \"no verified logs back the sync claim\" --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{\"lockable\":{\"met\":false,\"rule_kind\":\"gate\",\"unmet\":[\"claim must be in verified status before locking; has doubted\",\"needs >=3 assessed hypotheses; has 0\",\"needs >=2 independent supporting evidence items; has 0\"]}},\"atoms\":[],\"confidence\":null,\"created_at\":\"2026-10-09T16:36:04Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"events\":[{\"created_at\":\"2026-10-09T16:36:04Z\",\"kind\":\"concluded\",\"tx\":1},{\"created_at\":\"2026-10-09T16:36:04Z\",\"kind\":\"trusted\",\"tx\":2}],\"evidence\":[],\"hypotheses\":[],\"id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"provenance\":null,\"statement\":\"the nightly sync completes without errors\",\"status\":\"doubted\",\"updated_at\":\"2026-10-09T16:36:04Z\"},\"warnings\":[],\"hints\":[{\"command\":\"dont show claim:01M4GRB4M65K86K518SK38FSMQ\",\"description\":\"Inspect the updated claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":2,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont flag claim:01M4GRB4M65K86K518SK38FSMQ --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"no-evidence\",\"message\":\"--evidence: required; expected at least one URI, --file locator, or --url permalink\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"unmet_clauses\":[],\"remediation\":[{\"command\":\"dont flag claim:01M4GRB4M65K86K518SK38FSMQ --evidence <uri>\",\"description\":\"Re-run with at least one evidence reference\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "dont flag claim:01M4GRB4M65K86K518SK38FSMQ --evidence file:///tmp/dont-lifecycle-36ncy48s/evidence.log --json",
+      "stdout": "{\"ok\":false,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"error\",\"data\":{\"code\":\"malformed-evidence-uri\",\"message\":\"malformed evidence locator \\\"file:///tmp/dont-lifecycle-36ncy48s/evidence.log\\\": must be an http:// or https:// URI or a repo-relative file path\",\"rule_name\":null,\"spec_ref\":null,\"entity_id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"unmet_clauses\":[],\"remediation\":[{\"command\":\"dont flag claim:01M4GRB4M65K86K518SK38FSMQ --evidence <http://...>\",\"description\":\"Use a valid http:// or https:// URI or a repo-relative file path\"}]},\"warnings\":[],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 1,
+      "executed": true
+    },
+    {
+      "command": "dont flag claim:01M4GRB4M65K86K518SK38FSMQ --evidence https://example.com/nightly-sync.log --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{\"lockable\":{\"met\":false,\"rule_kind\":\"gate\",\"unmet\":[\"needs >=3 assessed hypotheses; has 0\",\"needs >=2 independent supporting evidence items; has 1\"]}},\"atoms\":[],\"confidence\":null,\"created_at\":\"2026-10-09T16:36:04Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"events\":[{\"created_at\":\"2026-10-09T16:36:04Z\",\"kind\":\"concluded\",\"tx\":1},{\"created_at\":\"2026-10-09T16:36:04Z\",\"kind\":\"trusted\",\"tx\":2},{\"created_at\":\"2026-10-09T16:36:04Z\",\"kind\":\"flagged\",\"tx\":3}],\"evidence\":[\"https://example.com/nightly-sync.log\"],\"hypotheses\":[],\"id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"provenance\":null,\"statement\":\"the nightly sync completes without errors\",\"status\":\"verified\",\"updated_at\":\"2026-10-09T16:36:04Z\"},\"warnings\":[],\"hints\":[{\"command\":\"dont show claim:01M4GRB4M65K86K518SK38FSMQ\",\"description\":\"Inspect the updated claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":3,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "dont show claim:01M4GRB4M65K86K518SK38FSMQ --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.2\",\"cli_version\":\"0.2.2\",\"envelope_kind\":\"claim\",\"data\":{\"applicable_rules\":{\"lockable\":{\"met\":false,\"rule_kind\":\"gate\",\"unmet\":[\"needs >=3 assessed hypotheses; has 0\",\"needs >=2 independent supporting evidence items; has 1\"]}},\"atoms\":[],\"confidence\":null,\"created_at\":\"2026-10-09T16:36:04Z\",\"depends_on\":[],\"derived_assessments\":[],\"entity_kind\":\"claim\",\"evidence\":[\"https://example.com/nightly-sync.log\"],\"hypotheses\":[],\"id\":\"claim:01M4GRB4M65K86K518SK38FSMQ\",\"provenance\":null,\"statement\":\"the nightly sync completes without errors\",\"status\":\"verified\",\"updated_at\":\"2026-10-09T16:36:04Z\"},\"warnings\":[],\"hints\":[{\"command\":\"dont trust claim:01M4GRB4M65K86K518SK38FSMQ --reason \\\"...\\\"\",\"description\":\"Register doubt about this claim\"}],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null,\"author\":\"sasha\"}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    }
+  ]
+}
