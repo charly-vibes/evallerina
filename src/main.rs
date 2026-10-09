@@ -10,7 +10,9 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use evallerina::live::OpenRouterTransport;
 use evallerina::recorded::RecordedTrajectory;
+use evallerina::registry::{DEFAULT_REPETITIONS, ordered_ids};
 use evallerina::scenario::{SCENARIOS_DIR, smoke_scenario};
 
 /// Evals with an avatar — measuring whether agents actually use the tools.
@@ -25,11 +27,17 @@ struct Cli {
 enum Command {
     /// Run the tier-1 smoke replay (no model, no network). Exit 0 iff green.
     Smoke,
-    /// Tier-2 live model run (requires OPENROUTER_API_KEY). Not yet implemented.
+    /// Tier-2 live model run (requires OPENROUTER_API_KEY).
     Live {
         /// Optional scenario name filter.
         #[arg(default_value = None)]
         scenario: Option<String>,
+        /// Repetitions per scenario × model cell.
+        #[arg(long, default_value_t = DEFAULT_REPETITIONS)]
+        reps: u32,
+        /// Run only this model id (default: the whole registry, in order).
+        #[arg(long, default_value = None)]
+        model: Option<String>,
     },
 }
 
@@ -53,12 +61,47 @@ fn main() -> std::process::ExitCode {
                 ExitCode::FAILURE
             }
         }
-        Command::Live { .. } => {
-            eprintln!(
-                "live runs are not implemented yet — tier-2 runner is evallerina-1vw; \
-                 use `just tier1` / `just smoke` for tier-1 replay"
-            );
-            ExitCode::FAILURE
+        Command::Live {
+            scenario: _,
+            reps,
+            model,
+        } => match run_live(reps, model) {
+            Ok(code) => code,
+            Err(msg) => {
+                eprintln!("{msg}");
+                ExitCode::FAILURE
+            }
+        },
+    }
+}
+
+/// Tier-2 live cell run: the smoke scenario × selected models × reps,
+/// in registry order. One report row per trial, one JSON line each.
+/// Exit 0 iff every trial passed.
+fn run_live(reps: u32, model: Option<String>) -> Result<ExitCode, String> {
+    let scenario = smoke_scenario();
+    let models: Vec<String> = match model {
+        Some(id) => vec![id],
+        None => ordered_ids().into_iter().map(String::from).collect(),
+    };
+    let mut all_passed = true;
+    for m in &models {
+        let mut transport = OpenRouterTransport::from_env(m)?;
+        for rep in 0..reps {
+            let report = evallerina::live::run_trial(
+                &scenario,
+                m,
+                rep,
+                &mut transport,
+                &evallerina::live::Bounds::default(),
+            )?;
+            all_passed &= report.status == evallerina::live::TrialStatus::Passed;
+            println!("{}", serde_json::to_string(&report).unwrap());
         }
+    }
+    if all_passed {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::FAILURE)
     }
 }

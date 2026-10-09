@@ -12,5 +12,7 @@
 //! output (wai 2026.10.5) carries remediation under `data.remediation`.
 
 pub mod envelope;
+pub mod live;
 pub mod recorded;
+pub mod registry;
 pub mod scenario;
