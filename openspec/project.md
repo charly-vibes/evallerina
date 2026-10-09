@@ -1,107 +1,47 @@
 # Project Context
 
 ## Purpose
-
-**evallerina** is the consumer eval battery for the **dulce-de-leche tool
-family** — the charly-vibes CLI suite built on genesis-vibes. It answers one
-question empirically: **do LLM agents read, parse, and act on the suite's AIX
-output channels?** — JSON envelopes (`ok`, `warnings`, `hints`), self-healing
-suggestions, managed blocks in `AGENTS.md`, state machines, `llms.txt`
-discovery.
-
-Every eval must produce an **actionable signal**: which output channel fails
-for which model tier — never a single aggregate score. Roadmap and
-issue-level detail live in beads (`bd ready`, `bd list`); this file documents
-only agent-relevant context.
+evallerina is the consumer eval battery for the dulce-de-leche (ddl) tool family. It runs tiered evaluations of agentic CLI tools against AIX artifacts (llms.txt, managed AGENTS.md, .genesis/tools.toml) to measure where output-channel faults come from — AIX channel work vs agent faults — with per-capability breakdowns and no single aggregate score (per cli-agent-evals-prompt.md anti-goals). A/B ablation (evallerina-rl1) quantifies the value of the AIX investment via score deltas.
 
 ## Tech Stack
-
-- **Rust** — harness crate (`src/`), depending on genesis-vibes (`Fixture`,
-  `evals` module) per genesis `docs/how-to/evals.md`
-- **just** — recipe entry points (`justfile`: `tier0`, `tier1`, `tier2`,
-  `smoke`, `ci`)
-- **GitHub Actions** — tier-0 gate on push, tier-1 nightly replay, tier-2
-  scheduled rotation (planned: evallerina-5ap / evallerina-aay)
-- **beads + openspec + wai** — issue tracking, change proposals, research
-  capture
+- Rust (harness crate, genesis-vibes Fixture + evals module per genesis docs/how-to/evals.md)
+- just (task runner): tier0 (fmt/clippy/test), tier1 (recorded replay), tier2 (live OpenRouter)
+- beads (embedded Dolt, no-db:true — issues.jsonl is the source of truth)
+- wai workspace + OpenSpec (specs/, changes/)
+- GHA workflows (planned): tier-0 push gate, tier-1 nightly replay, tier-2 scheduled rotation
 
 ## Project Conventions
 
 ### Code Style
-
-- `cargo fmt --check` and `cargo clippy -- -D warnings` gate every push
-  (tier-0)
-- Every new source file carries a **Purpose / Responsibilities / Rationale**
-  header (Must gate on evallerina-e10)
-- `.editorconfig` and `_typos.toml` standardize formatting and prose
+- New files carry Purpose/Responsibilities/Rationale headers (per evallerina-e10 Must gate)
+- cargo fmt --check + clippy -D warnings must pass (tier0 gates every push)
 
 ### Architecture Patterns
-
-- **Tier ladder** (normative: genesis `evals-guidelines` spec) — tier 0 static
-  checks (every push, no model) / tier 1 scripted replay of recorded
-  transcripts (nightly, no model) / tier 2 live model runs (scheduled,
-  never gates a push)
-- **Sandboxed fixtures** — fresh temp dir, tool binaries pre-provisioned,
-  isolated `HOME`, network denied unless the scenario opts in
-- **Process-boundary scoring** — assert only on exit codes, captured
-  stdout/stderr envelopes, and filesystem state; free-form agent text is
-  never scored
-- **Synthetic repo archetypes** — deterministic fixture repos with injected
-  faults, replayed via the tier-0/1 recorded-trajectory harness
-  (evallerina-sqq: 6 archetypes)
+- Tier ladder per genesis evals-guidelines: tier-0 static (push, no model), tier-1 replay of recorded AgentStep transcripts (nightly, no model/network), tier-2 live model runs via OpenRouter :free (scheduled, never gates a push)
+- Tier-2 runner (1vw) uses an action protocol; never gates a push
+- Scenario families: hint adherence via contrived-failure injection (ey7), doc-drift blindness with stale AGENTS.md bait (7y1), 6 synthetic repo archetypes for cross-tool workflows (sqq)
+- Report aggregation: per-output-channel x check-code x model-id matrix; fault routing (tool faults → tool repo tickets; agent faults across ≥3 model ids → AIX channel work in genesis). rate_limited and absent cells are never dropped or silently substituted
 
 ### Testing Strategy
-
-- Tier-0 (`just ci`) gates every push: fmt + clippy + test
-- Tier-1 replay scenarios assert envelope outcomes over recorded AgentStep
-  transcripts; Must gate on the harness is ≥1 smoke scenario replaying a
-  recorded wai trajectory (wai = first target, most adopted)
-- Tier-2 live runs require `OPENROUTER_API_KEY`, record raw model ids
-  verbatim, n ≥ 3 reps per scenario × model cell, 429 → one retry then
-  `rate_limited`
-- Every failure classified via the fault taxonomy
-  (`ERR_ENVELOPE_HINT_BLINDNESS`, `ERR_DOC_DRIFT_BLINDNESS`,
-  `ERR_ACTION_FORMAT_VIOLATION`, …) and routed — tool faults become tickets
-  in the tool's repo; agent faults reproducible across ≥ 3 models point at
-  the output channel (AIX work in genesis)
+- Tier-0/1 first: Scenario::run over recorded wai trajectories; envelope-assertion helpers; ErrorTaxonomy classification (e10)
+- Every eval run twice per evals.md Step 5: full (AIX artifacts) vs ablated (raw binaries); delta over ≥3 replay runs per arm is the measured value
+- KPI assertions per the Qwen doc: context-recovery time, test-selection
 
 ### Git Workflow
-
-- Single `main` branch, no branches yet
-- Conventional-style commit subjects (observed: `chore:`, `beads:`,
-  `chore(beads):`)
-- Issue-level provenance in beads: `base_commit` + expected `files` per
-  ticket (pattern set by the evallerina-sqq remediation)
-- Commit beads changes only — `issues.jsonl` is the source of truth (embedded
-  + `no-db:true`); transient gate locks (`*.gate.lock`) are gitignored
+- trunk-based on main; beads issues with explicit BLOCKS dependency graph; work items carry base_commit metadata
+- Direct commit conventions: chore(beads)/chore + concise imperative subject
 
 ## Domain Context
-
-- The suite being evaluated: **dulce-de-leche** (wai, dont, ah, vampiro,
-  pretender, …) — wai is the first eval target, most adopted
-- AIX = agent-experience artifacts: the A/B ablation family measures the
-  delta of AIX artifacts present vs absent — the measured value of the
-  documentation investment
-- Genesis provides the normative specs this repo consumes: `evals-guidelines`
-  spec, evals how-to, eval-report contract (see README Related section)
-- Report rows follow the genesis `eval-report` JSON contract (`report_version`)
+- Genesis = design system repo; evals-guidelines defines the tier ladder and fault routing; evals.md defines the run protocol (Steps 5, 7)
+- wai is the first target tool family (most adopted); ah/dont/genesis/vampiro also in scope for cross-tool suites
+- Drifted fixtures intentionally include stale manifests, registry drift, stale AGENTS.md bait (overlaps sqq archetype 6 / 7y1)
 
 ## Important Constraints
-
-- **No model in gate paths**: tier-0/1 never call a model; tier-2 never gates
-  a push
-- **No secrets in traces**: no credentials, personal data, or sensitive
-  prompt/trace content in committed scenarios or reports
-- **Network denied** in fixture sandboxes unless the scenario explicitly opts
-  in
-- New harness code follows genesis pattern (Ticket → base_commit → files →
-  Must gate → implement → validate → commit)
-- Free-tier entry: OpenRouter `:free` ids are the default candidates of the
-  model registry
+- Tier-2 requires OPENROUTER_API_KEY; live runs never gate a push
+- Anti-goal: no single aggregate score; missing/absent cells must be explicit
+- No interactive hooks for DevOps/headless archetype (CI-only)
 
 ## External Dependencies
-
-- **OpenRouter API** — tier-2 live model runs (`OPENROUTER_API_KEY` env var)
-- **genesis-vibes** — harness crate dependency (Fixture + evals)
-- **GitHub** / gh CLI — workflows, authenticated locally
-- Genesis repo docs (spec source of truth)
+- OpenRouter (:free tier models, default deepseek/deepseek-v4-flash:free) for tier-2 live runs
+- genesis-vibes crate (Fixture + evals module) for the harness
+- recorded wai AgentStep transcripts for tier-1 replay
