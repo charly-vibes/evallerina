@@ -12,7 +12,9 @@
 //! repo); agent missteps are *agent faults* with an `ERR_*` taxonomy
 //! code.
 
-use genesis::evals::{CheckOutcome, EnvelopeOutcome, ScenarioResult, parse_envelope};
+use genesis::evals::{
+    CheckOutcome, EnvelopeOutcome, ErrorTaxonomy, ScenarioResult, parse_envelope,
+};
 use serde_json::Value;
 
 /// Failure while reading a captured envelope.
@@ -179,10 +181,12 @@ pub fn stderr_did_you_mean(
 /// otherwise.
 ///
 /// The substring form exists because dont's remediation commands embed
-/// placeholders (`dont trust <id> --reason "<specific grounds>"`) and
-/// capture-time literals (the minted claim id) that an agent is not
-/// expected to reproduce character-for-character; asserting the stable
-/// fragment keeps the check single-fault on hint presence.
+/// capture-time literals that an agent is not expected to reproduce
+/// character-for-character; asserting the stable fragment keeps the
+/// check single-fault on hint presence. For commands embedding
+/// *runtime-minted entity ids* (claim ids), use
+/// [`error_envelope_with_hint_matching`] instead — a literal fragment
+/// with a recorded id can never match a live transcript (evallerina-hhs).
 pub fn error_envelope_with_hint_containing(
     step: usize,
     fragment: impl Into<String>,
@@ -241,6 +245,86 @@ pub fn envelope_field_is(
             other => CheckOutcome::tool_fault(format!(
                 "step {step}: expected {pointer} == `{expected}`, got {other:?}"
             )),
+        }
+    }
+}
+
+/// Id-agnostic sibling of [`error_envelope_with_hint_containing`]
+/// (evallerina-hhs): assert `steps[step]` exited nonzero with a parseable
+/// error envelope some of whose remediation commands *match* `pattern`.
+/// Tool fault otherwise.
+///
+/// The regex form exists because dont's remediation commands embed the
+/// claim id minted *at runtime* — a recorded id in a literal fragment
+/// can never match a live transcript. A pattern like
+/// `dont trust claim:\S+ --reason` keeps the check single-fault on hint
+/// presence (the --reason argument is still asserted) without pinning
+/// the id. The pattern is searched anywhere in each remediation command,
+/// mirroring `contains`.
+pub fn error_envelope_with_hint_matching(
+    step: usize,
+    pattern: &str,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let re = regex::Regex::new(pattern).unwrap_or_else(|e| panic!("hint pattern {pattern:?}: {e}"));
+    move |result: &ScenarioResult| {
+        let Some(s) = result.steps.get(step) else {
+            return CheckOutcome::tool_fault(format!("no step {step} in replay"));
+        };
+        if s.exit_code == 0 {
+            return CheckOutcome::tool_fault(format!(
+                "step {step} exited 0; expected a failing invocation"
+            ));
+        }
+        let value = match extract_envelope(&s.stdout) {
+            Ok(v) => v,
+            Err(e) => return CheckOutcome::tool_fault(format!("step {step}: {e}")),
+        };
+        if value.get("ok").and_then(Value::as_bool) != Some(false) {
+            return CheckOutcome::tool_fault(format!("step {step} is not an error envelope"));
+        }
+        let commands = remediation_commands(&value);
+        if commands.iter().any(|c| re.is_match(c)) {
+            CheckOutcome::pass()
+        } else {
+            CheckOutcome::tool_fault(format!(
+                "step {step} error envelope lacks remediation matching `{pattern}` (suggested: {commands:?})"
+            ))
+        }
+    }
+}
+
+/// Id-agnostic sibling of genesis's `agent_followed_hint` (evallerina-hhs):
+/// assert the command executed at `steps[step]` starts with a match of
+/// `pattern` (the rest of the line may carry trailing flags/args, mirroring
+/// genesis's exact-or-prefix semantics). Agent fault
+/// `ERR_ENVELOPE_HINT_BLINDNESS` otherwise.
+///
+/// The regex form exists for the same reason as
+/// [`error_envelope_with_hint_matching`]: runtime-minted entity ids make
+/// literal suggested commands unmatchable in live replays. Patterns
+/// should end in `\b` so the match can't spill into a longer argument
+/// (e.g. `--reason` matching `--reasonless`).
+pub fn agent_followed_hint_matching(
+    step: usize,
+    pattern: &str,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    let re = regex::Regex::new(pattern).unwrap_or_else(|e| panic!("hint pattern {pattern:?}: {e}"));
+    move |result: &ScenarioResult| {
+        let Some(s) = result.steps.get(step) else {
+            return CheckOutcome::agent_fault(
+                ErrorTaxonomy::EnvelopeHintBlindness,
+                format!("agent never ran a command matching `{pattern}`"),
+            );
+        };
+        match re.find(&s.command) {
+            Some(m) if m.start() == 0 => CheckOutcome::pass(),
+            _ => CheckOutcome::agent_fault(
+                ErrorTaxonomy::EnvelopeHintBlindness,
+                format!(
+                    "agent ran `{}` instead of a command matching `{pattern}`",
+                    s.command
+                ),
+            ),
         }
     }
 }

@@ -14,6 +14,28 @@ use evallerina::scenario::{
 };
 use genesis::evals::{AgentStep, Scenario, agent_executed_all, agent_followed_hint};
 
+/// Rewrite every occurrence of a recorded claim id with a fresh one —
+/// in both the agent's commands and the tool's captured stdout — to
+/// simulate a *live* replay where the agent minted its own id instead
+/// of reproducing the recorded one (evallerina-hhs).
+fn with_fresh_claim_id(
+    trajectory: &RecordedTrajectory,
+    recorded_id: &str,
+    fresh_id: &str,
+) -> Vec<AgentStep> {
+    trajectory
+        .steps()
+        .iter()
+        .map(|s| AgentStep {
+            command: s.command.replace(recorded_id, fresh_id),
+            stdout: s.stdout.replace(recorded_id, fresh_id),
+            stderr: s.stderr.clone(),
+            exit_code: s.exit_code,
+            executed: s.executed,
+        })
+        .collect()
+}
+
 /// Load a recorded trajectory from a scenario directory by name.
 fn recorded_trajectory(dir: &str, name: &str) -> RecordedTrajectory {
     let path = format!("{dir}/{name}.json");
@@ -262,8 +284,28 @@ fn dont_lifecycle_blind_replay_is_detected() {
     assert_eq!(codes, vec![Some("ERR_ENVELOPE_HINT_BLINDNESS")]);
 }
 
-// ---------------------------------------------------------------------
-// evallerina-7y1: doc-drift blindness family under scenarios/doc-drift/
+/// Live-replay seam (evallerina-hhs): a live agent mints its own claim
+/// id, so the recorded id never appears in the live transcript. The
+/// scenario's checks must still pass — hint-presence checks match the
+/// id-agnostic shape of the remediation, hint-following checks match
+/// the id-agnostic shape of the executed command.
+#[test]
+fn dont_lifecycle_live_replay_with_fresh_claim_id_stays_green() {
+    let trajectory = hint_adherence_trajectory("dont-hint-adherence-lifecycle");
+    let steps = with_fresh_claim_id(
+        &trajectory,
+        "claim:01M4GRB4M65K86K518SK38FSMQ",
+        "claim:01LIVEFRESHCLAIM0123456789ABCDEF",
+    );
+    let report = dont_lifecycle_scenario()
+        .run(steps)
+        .expect("fixture materializes");
+    assert!(
+        report.passed,
+        "dont lifecycle must pass with a freshly minted claim id, failures: {}",
+        serde_json::to_string(&report).unwrap()
+    );
+}
 // ---------------------------------------------------------------------
 
 /// Must gate (evallerina-7y1): the stale-AGENTS.md scenario replays

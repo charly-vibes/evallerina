@@ -10,8 +10,9 @@
 //! tickets with their own recorded fixtures.
 
 use crate::envelope::{
-    envelope_field_is, error_envelope_with_hint_containing, error_envelope_with_remediation_hint,
-    ok_envelope_loose, stderr_did_you_mean,
+    agent_followed_hint_matching, envelope_field_is, error_envelope_with_hint_containing,
+    error_envelope_with_hint_matching, error_envelope_with_remediation_hint, ok_envelope_loose,
+    stderr_did_you_mean,
 };
 use genesis::evals::{
     DistractorKind, Scenario, agent_executed_all, agent_followed_hint, doc_drift_blindness,
@@ -176,9 +177,12 @@ pub fn wai_corrupt_config_scenario() -> Scenario {
 ///    doubted → verified
 /// 4. `dont show <id>` — data.status `verified`
 ///
-/// The claim id is the one minted at capture time and is recorded
-/// verbatim (tier-1 replay is offline; ids are stable within the
-/// recording). Checks, one fault each:
+/// The claim id is minted at capture time and recorded verbatim, but the
+/// checks never pin it: a live agent mints its own id, so the
+/// hint-presence and hint-following checks match the id-agnostic command
+/// *shape* via regex (evallerina-hhs —
+/// [`error_envelope_with_hint_matching`] /
+/// [`agent_followed_hint_matching`]). Checks, one fault each:
 /// - `trust-error-carries-reason-remediation` (tool fault)
 /// - `agent-followed-reason-hint` (agent fault
 ///   `ERR_ENVELOPE_HINT_BLINDNESS`)
@@ -192,26 +196,27 @@ pub fn wai_corrupt_config_scenario() -> Scenario {
 /// - `show-reports-verified` (tool fault if the state machine did not
 ///   land on verified)
 pub fn dont_lifecycle_scenario() -> Scenario {
-    const CLAIM: &str = "claim:01M4GRB4M65K86K518SK38FSMQ";
     Scenario::new(
         "dont-hint-adherence-lifecycle",
         "Record and verify a claim about the nightly sync.",
     )
     .check(
         "trust-error-carries-reason-remediation",
-        error_envelope_with_hint_containing(2, format!("dont trust {CLAIM} --reason")),
+        // Id-agnostic (evallerina-hhs): the claim id is minted at runtime,
+        // so the remediation pattern must not pin the recorded one.
+        error_envelope_with_hint_matching(2, r"dont trust claim:\S+ --reason"),
     )
     .check(
         "agent-followed-reason-hint",
-        agent_followed_hint(3, format!("dont trust {CLAIM} --reason")),
+        agent_followed_hint_matching(3, r"dont trust claim:\S+ --reason\b"),
     )
     .check(
         "flag-error-carries-evidence-remediation",
-        error_envelope_with_hint_containing(4, format!("dont flag {CLAIM} --evidence")),
+        error_envelope_with_hint_matching(4, r"dont flag claim:\S+ --evidence"),
     )
     .check(
         "agent-followed-evidence-hint",
-        agent_followed_hint(5, format!("dont flag {CLAIM} --evidence")),
+        agent_followed_hint_matching(5, r"dont flag claim:\S+ --evidence\b"),
     )
     .check(
         "file-uri-rejected-with-repair-hint",
@@ -219,7 +224,7 @@ pub fn dont_lifecycle_scenario() -> Scenario {
     )
     .check(
         "agent-followed-uri-repair-hint",
-        agent_followed_hint(6, format!("dont flag {CLAIM} --evidence")),
+        agent_followed_hint_matching(6, r"dont flag claim:\S+ --evidence\b"),
     )
     .check("agent-executed-all", agent_executed_all())
     .check(
@@ -246,7 +251,11 @@ instructions.
 /// Stale AGENTS.md bait for [`dont_doc_drift_scenario`]: the managed
 /// block names `dont verify` and `dont doubt`, verbs that do not exist
 /// in dont 0.2.2 (probe: exit 2, `unrecognized subcommand 'verify'`; the
-/// live verbs are `flag`/`dismiss` and `trust`).
+/// live verbs are `flag`/`dismiss` and `trust`). Re-probed against dont
+/// v0.4.0 (the evals-rotation.yml pin, ebc9efb2): still exit 2,
+/// unrecognized — clap now suggests `verify-evidence`, a different verb
+/// (evidence liveness check, no status change), so the bait premise
+/// holds.
 pub const STALE_DONT_AGENTS_MD: &str = "\
 <!-- DONT:START -->
 # Epistemic discipline
@@ -316,7 +325,6 @@ pub fn wai_doc_drift_scenario() -> Scenario {
 /// - `show-reports-verified` (tool fault if the state machine did not
 ///   land on verified)
 pub fn dont_doc_drift_scenario() -> Scenario {
-    const CLAIM: &str = "claim:01M4GS3859R1T9Z69V6ZN3BMGM";
     Scenario::new(
         "dont-doc-drift-stale-lifecycle",
         "Record and verify a claim about the release pipeline.",
@@ -328,11 +336,12 @@ pub fn dont_doc_drift_scenario() -> Scenario {
     )
     .check(
         "agent-followed-reason-hint",
-        agent_followed_hint(3, format!("dont trust {CLAIM} --reason")),
+        // Id-agnostic (evallerina-hhs): the claim id is minted at runtime.
+        agent_followed_hint_matching(3, r"dont trust claim:\S+ --reason\b"),
     )
     .check(
         "agent-followed-evidence-hint",
-        agent_followed_hint(5, format!("dont flag {CLAIM} --evidence")),
+        agent_followed_hint_matching(5, r"dont flag claim:\S+ --evidence\b"),
     )
     .check("agent-executed-all", agent_executed_all())
     .check(
