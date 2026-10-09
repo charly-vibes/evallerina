@@ -10,11 +10,12 @@
 //! tickets with their own recorded fixtures.
 
 use crate::envelope::{
-    agent_followed_hint_loose, envelope_field_is, error_envelope_with_hint_containing,
-    error_envelope_with_remediation_hint, ok_envelope_loose, stderr_did_you_mean,
+    envelope_field_is, error_envelope_with_hint_containing, error_envelope_with_remediation_hint,
+    ok_envelope_loose, stderr_did_you_mean,
 };
-use genesis::evals::{DistractorKind, doc_drift_blindness};
-use genesis::evals::{Scenario, agent_executed_all};
+use genesis::evals::{
+    DistractorKind, Scenario, agent_executed_all, agent_followed_hint, doc_drift_blindness,
+};
 
 /// Directory holding recorded trajectories, relative to the crate root.
 pub const SCENARIOS_DIR: &str = "scenarios";
@@ -39,9 +40,8 @@ pub const DOC_DRIFT_DIR: &str = "scenarios/doc-drift";
 ///
 /// Checks, one fault each:
 /// - `status-error-envelope-carries-remediation-hint` (tool fault if broken)
-/// - `agent-followed-hint` (agent fault `ERR_ENVELOPE_HINT_BLINDNESS`; prefix-tolerant — see
-///   [`crate::envelope::agent_followed_hint_loose`] for why genesis's exact-match
-///   helper flags flag-bearing replays)
+/// - `agent-followed-hint` (agent fault `ERR_ENVELOPE_HINT_BLINDNESS`; prefix-tolerant —
+///   genesis's `agent_followed_hint` matches exact-or-prefix since v0.12.2)
 /// - `agent-executed-all` (agent fault `ERR_TOOL_EXECUTION_HALLUCINATION`)
 /// - `init-recovery-ok` (tool fault if broken)
 pub fn smoke_scenario() -> Scenario {
@@ -53,10 +53,7 @@ pub fn smoke_scenario() -> Scenario {
         "status-error-envelope-carries-remediation-hint",
         error_envelope_with_remediation_hint(0, "wai doctor"),
     )
-    .check(
-        "agent-followed-hint",
-        agent_followed_hint_loose(1, "wai doctor"),
-    )
+    .check("agent-followed-hint", agent_followed_hint(1, "wai doctor"))
     .check("agent-executed-all", agent_executed_all())
     .check("init-recovery-ok", ok_envelope_loose(2))
 }
@@ -88,7 +85,7 @@ pub fn wai_typo_scenario() -> Scenario {
         )
         .check(
             "agent-followed-did-you-mean",
-            agent_followed_hint_loose(1, "wai status"),
+            agent_followed_hint(1, "wai status"),
         )
         .check("agent-executed-all", agent_executed_all())
         .check("init-recovery-ok", ok_envelope_loose(2))
@@ -125,7 +122,7 @@ pub fn wai_corrupt_config_scenario() -> Scenario {
     )
     .check(
         "agent-followed-doctor-hint",
-        agent_followed_hint_loose(1, "wai doctor"),
+        agent_followed_hint(1, "wai doctor"),
     )
     .check("agent-executed-all", agent_executed_all())
     .check("status-recovery-ok", ok_envelope_loose(3))
@@ -177,7 +174,7 @@ pub fn dont_lifecycle_scenario() -> Scenario {
     )
     .check(
         "agent-followed-reason-hint",
-        agent_followed_hint_loose(3, format!("dont trust {CLAIM} --reason")),
+        agent_followed_hint(3, format!("dont trust {CLAIM} --reason")),
     )
     .check(
         "flag-error-carries-evidence-remediation",
@@ -185,7 +182,7 @@ pub fn dont_lifecycle_scenario() -> Scenario {
     )
     .check(
         "agent-followed-evidence-hint",
-        agent_followed_hint_loose(5, format!("dont flag {CLAIM} --evidence")),
+        agent_followed_hint(5, format!("dont flag {CLAIM} --evidence")),
     )
     .check(
         "file-uri-rejected-with-repair-hint",
@@ -193,7 +190,7 @@ pub fn dont_lifecycle_scenario() -> Scenario {
     )
     .check(
         "agent-followed-uri-repair-hint",
-        agent_followed_hint_loose(6, format!("dont flag {CLAIM} --evidence")),
+        agent_followed_hint(6, format!("dont flag {CLAIM} --evidence")),
     )
     .check("agent-executed-all", agent_executed_all())
     .check(
@@ -261,10 +258,7 @@ pub fn wai_doc_drift_scenario() -> Scenario {
         "agent-trusted-envelope-not-stale-docs",
         doc_drift_blindness("wai check"),
     )
-    .check(
-        "agent-followed-hint",
-        agent_followed_hint_loose(1, "wai doctor"),
-    )
+    .check("agent-followed-hint", agent_followed_hint(1, "wai doctor"))
     .check("agent-executed-all", agent_executed_all())
     .check("init-recovery-ok", ok_envelope_loose(2))
 }
@@ -305,11 +299,11 @@ pub fn dont_doc_drift_scenario() -> Scenario {
     )
     .check(
         "agent-followed-reason-hint",
-        agent_followed_hint_loose(3, format!("dont trust {CLAIM} --reason")),
+        agent_followed_hint(3, format!("dont trust {CLAIM} --reason")),
     )
     .check(
         "agent-followed-evidence-hint",
-        agent_followed_hint_loose(5, format!("dont flag {CLAIM} --evidence")),
+        agent_followed_hint(5, format!("dont flag {CLAIM} --evidence")),
     )
     .check("agent-executed-all", agent_executed_all())
     .check(

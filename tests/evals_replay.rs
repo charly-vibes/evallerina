@@ -6,14 +6,13 @@
 //! failure modes are still detected, with zero model calls and zero
 //! network; `just tier1` gates nightly on this file.
 
-use evallerina::envelope::agent_followed_hint_loose;
 use evallerina::recorded::RecordedTrajectory;
 use evallerina::scenario::{
     DOC_DRIFT_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD, STALE_WAI_AGENTS_MD,
     dont_doc_drift_scenario, dont_lifecycle_scenario, smoke_scenario, wai_corrupt_config_scenario,
     wai_doc_drift_scenario, wai_typo_scenario,
 };
-use genesis::evals::{AgentStep, Scenario, agent_executed_all};
+use genesis::evals::{AgentStep, Scenario, agent_executed_all, agent_followed_hint};
 
 /// Load a recorded trajectory from a scenario directory by name.
 fn recorded_trajectory(dir: &str, name: &str) -> RecordedTrajectory {
@@ -77,10 +76,7 @@ fn hint_blind_replay_is_detected() {
         "wai-hint-adherence-smoke",
         "Recover from the status failure.",
     )
-    .check(
-        "agent-followed-hint",
-        agent_followed_hint_loose(1, "wai doctor"),
-    )
+    .check("agent-followed-hint", agent_followed_hint(1, "wai doctor"))
     .check("agent-executed-all", agent_executed_all());
     let report = scenario.run(steps).expect("fixture materializes");
     assert!(!report.passed, "hint-blind replay must fail");
@@ -134,7 +130,7 @@ fn typo_blind_replay_is_detected() {
     let scenario = Scenario::new("wai-hint-adherence-typo", "Run status on this directory.")
         .check(
             "agent-followed-did-you-mean",
-            agent_followed_hint_loose(1, "wai status"),
+            agent_followed_hint(1, "wai status"),
         )
         .check("agent-executed-all", agent_executed_all());
     let report = scenario.run(steps).expect("fixture materializes");
@@ -190,7 +186,7 @@ fn corrupt_config_blind_replay_is_detected() {
     )
     .check(
         "agent-followed-doctor-hint",
-        agent_followed_hint_loose(1, "wai doctor"),
+        agent_followed_hint(1, "wai doctor"),
     )
     .check("agent-executed-all", agent_executed_all());
     let report = scenario.run(steps).expect("fixture materializes");
@@ -244,7 +240,7 @@ fn dont_lifecycle_blind_replay_is_detected() {
     )
     .check(
         "agent-followed-reason-hint",
-        agent_followed_hint_loose(3, "dont trust claim:01M4GRB4M65K86K518SK38FSMQ --reason"),
+        agent_followed_hint(3, "dont trust claim:01M4GRB4M65K86K518SK38FSMQ --reason"),
     )
     .check("agent-executed-all", agent_executed_all());
     let report = scenario.run(steps).expect("fixture materializes");

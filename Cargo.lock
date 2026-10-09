@@ -213,8 +213,8 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "genesis-vibes"
-version = "0.12.1"
-source = "git+https://github.com/charly-vibes/genesis?tag=v0.12.1#99e88198328a0f48f9f7396272d251e83e9f8469"
+version = "0.12.3"
+source = "git+https://github.com/charly-vibes/genesis?tag=v0.12.3#6d6a8ecb3df681099fcdfe4bc29bc7e8be1735f1"
 dependencies = [
  "clap",
  "clap_complete",

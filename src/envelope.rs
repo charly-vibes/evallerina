@@ -12,9 +12,7 @@
 //! repo); agent missteps are *agent faults* with an `ERR_*` taxonomy
 //! code.
 
-use genesis::evals::{
-    CheckOutcome, EnvelopeOutcome, ErrorTaxonomy, ScenarioResult, parse_envelope,
-};
+use genesis::evals::{CheckOutcome, EnvelopeOutcome, ScenarioResult, parse_envelope};
 use serde_json::Value;
 
 /// Failure while reading a captured envelope.
@@ -123,35 +121,6 @@ pub fn error_envelope_with_remediation_hint(
 /// earlier error envelope. Agent fault (`ERR_ENVELOPE_HINT_BLINDNESS`)
 /// otherwise.
 ///
-/// Prefix-tolerant: a replay step counts as following the hint when it
-/// equals `suggested_command` or starts with `suggested_command` plus a
-/// space — real agents append flags (`wai doctor --json`), and genesis's
-/// exact-match `agent_followed_hint` flags them as blind (mirrors the
-/// exact-or-prefix matching `doc_drift_blindness` already uses).
-pub fn agent_followed_hint_loose(
-    recovery_index: usize,
-    suggested_command: impl Into<String>,
-) -> impl Fn(&ScenarioResult) -> CheckOutcome {
-    let suggested = suggested_command.into();
-    let suggested_prefix = format!("{suggested} ");
-    move |result: &ScenarioResult| match result.steps.get(recovery_index) {
-        Some(s) if s.command == suggested || s.command.starts_with(&suggested_prefix) => {
-            CheckOutcome::pass()
-        }
-        Some(s) => CheckOutcome::agent_fault(
-            ErrorTaxonomy::EnvelopeHintBlindness,
-            format!(
-                "agent ran `{}` instead of the suggested `{suggested}`",
-                s.command
-            ),
-        ),
-        None => CheckOutcome::agent_fault(
-            ErrorTaxonomy::EnvelopeHintBlindness,
-            format!("agent never ran the suggested `{suggested}`"),
-        ),
-    }
-}
-
 /// Assert `steps[step]` exited 0 with an `ok:true` envelope, extracted
 /// leniently from stdout (preamble tolerated). Tool fault otherwise:
 /// the agent may have followed the hint correctly and the fix itself

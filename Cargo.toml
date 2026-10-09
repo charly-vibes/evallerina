@@ -15,7 +15,7 @@ name = "evallerina"
 path = "src/main.rs"
 
 [dependencies]
-genesis-vibes = { git = "https://github.com/charly-vibes/genesis", tag = "v0.12.1" }
+genesis-vibes = { git = "https://github.com/charly-vibes/genesis", tag = "v0.12.3" }
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
