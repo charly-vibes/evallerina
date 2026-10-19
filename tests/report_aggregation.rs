@@ -514,7 +514,10 @@ fn report_without_route_has_no_routed_field_and_no_jsonl() {
     assert!(out.status.success());
     let dashboard: serde_json::Value =
         serde_json::from_slice(&out.stdout).expect("dashboard JSON on stdout");
-    assert!(dashboard.get("routed").is_none(), "no routed field without --route");
+    assert!(
+        dashboard.get("routed").is_none(),
+        "no routed field without --route"
+    );
     assert!(
         !sandbox.join("proposed-tickets.jsonl").exists(),
         "no proposed-tickets.jsonl without --route"
@@ -591,6 +594,76 @@ fn report_route_dry_run_writes_proposed_tickets_jsonl() {
     assert_eq!(row["decision"], "dry_run");
 
     std::fs::remove_dir_all(&sandbox).ok();
+}
+
+/// Routing failures surface as skipped counts, not errors: an unmapped
+/// tool (no routing.toml entry) yields a skipped proposal and the
+/// report still succeeds with the summary recording it.
+#[test]
+fn unmapped_tool_counts_skipped_and_report_succeeds() {
+    let rows = ["m1", "m2", "m3"]
+        .iter()
+        .map(|m| {
+            trial(
+                "wai-hint-adherence-typo",
+                m,
+                "failed",
+                json!([tool_fault()]),
+            )
+        })
+        .collect::<Vec<_>>();
+    let configured = models(3);
+    let mut dashboard = aggregate_rows(&rows, &configured, &test_channel_of).expect("aggregates");
+    let empty_map: std::collections::BTreeMap<String, String> = [].into();
+    let mut runner =
+        |_: &std::path::Path, _: &[&str]| panic!("dry-run routing must never invoke bd");
+    let proposals = evallerina::report::attach_routing(
+        &mut dashboard,
+        &rows,
+        &configured,
+        &empty_map,
+        false,
+        &mut runner,
+    )
+    .expect("routing succeeds despite the unmapped tool");
+    assert_eq!(dashboard["routed"]["skipped"], 1);
+    assert_eq!(dashboard["routed"]["dry_run"], 0);
+    assert_eq!(proposals[0].decision, "skipped");
+    assert_eq!(proposals[0].reason.as_deref(), Some("unmapped_tool"));
+}
+
+/// Absent cells are the record that a cell did not run; they are never
+/// failures, never routed, never dropped — the routed summary records
+/// zero decisions for absent-only rows.
+#[test]
+fn absent_rows_never_routed() {
+    let rows = vec![json!({
+        "kind": "absent",
+        "report_version": 1,
+        "scenario": "wai-hint-adherence-typo",
+        "tool": "wai",
+        "model": "m1",
+        "repetition": 1
+    })];
+    let configured = models(3);
+    let mut dashboard = aggregate_rows(&rows, &configured, &test_channel_of).expect("aggregates");
+    let repo_map = [("wai".to_owned(), "../wai".to_owned())].into();
+    let mut runner =
+        |_: &std::path::Path, _: &[&str]| panic!("dry-run routing must never invoke bd");
+    let proposals = evallerina::report::attach_routing(
+        &mut dashboard,
+        &rows,
+        &configured,
+        &repo_map,
+        false,
+        &mut runner,
+    )
+    .expect("routing succeeds");
+    assert!(proposals.is_empty(), "absent rows produce no proposals");
+    assert_eq!(dashboard["routed"]["dry_run"], 0);
+    assert_eq!(dashboard["routed"]["skipped"], 0);
+    assert_eq!(dashboard["routed"]["filed"], 0);
+    assert_eq!(dashboard["routed"]["existing"], 0);
 }
 
 // ── registry wiring ─────────────────────────────────────────────────────────
