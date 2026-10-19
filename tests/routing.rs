@@ -357,6 +357,32 @@ fn open_issue_with_token_dedups_to_existing_without_creating() {
 }
 
 #[test]
+fn closed_issue_does_not_block_refiling_a_regressed_fault() {
+    // bd search includes closed issues by default — the status filter
+    // must be pinned so a fault that regresses after its ticket was
+    // closed is re-filed rather than suppressed.
+    let repo = Sandbox::with_beads("dedup-closed");
+    let token = "evallerina:wai-hint-adherence-typo:tool_fault";
+    let closed_id = repo.bd_create(
+        "wai-hint-adherence-typo: tool_fault",
+        &format!("fingerprint {token}"),
+    );
+    let out = routing::run_bd(&repo.path, &["close", &closed_id]).expect("bd close");
+    assert!(out.status.success(), "bd close failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    let mut row = failable_row(token, &repo.path);
+    let mut spy = BdSpy::new();
+    routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy.runner())
+        .expect("filing must not fail when only a closed issue holds the token");
+
+    assert_eq!(row.decision, "filed", "closed must not block re-filing");
+    assert_eq!(row.reason, None);
+    let new_id = row.bd_issue_id.as_deref().expect("filed captures the new issue id");
+    assert_ne!(new_id, closed_id, "a NEW issue was filed");
+    assert_eq!(spy.create_calls().len(), 1, "exactly one bd create");
+}
+
+#[test]
 fn unknown_scenario_is_a_loud_error() {
     let rows = vec![trial_row("mystery-scenario", "wai", "m/a")];
     let err = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
