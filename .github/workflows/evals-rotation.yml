@@ -62,9 +62,27 @@ jobs:
           cargo run --release -- live --budget-mins 20 \
             | tee -a reports/tier2-rotation.jsonl
 
+      # Aggregate the rows into the fault dashboard and run the
+      # fault-routing step in its dry-run default: the additive routed
+      # summary lands in the dashboard and proposed-tickets.jsonl is
+      # written next to the report for review. Filing proposed tickets
+      # is a cross-repo write that stays behind explicit local
+      # authorization — CI must NEVER file.
+      - name: Aggregate + route (dry-run)
+        run: |
+          cargo run --release -- report reports/tier2-rotation.jsonl --route
+
       - name: Upload rotation rows
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tier2-rotation
           path: reports/tier2-rotation.jsonl
+
+      - name: Upload proposed tickets (dry-run artifact)
+        if: always()
+        if-no-files-found: warn
+        uses: actions/upload-artifact@v4
+        with:
+          name: proposed-tickets
+          path: reports/proposed-tickets.jsonl
