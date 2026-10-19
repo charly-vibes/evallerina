@@ -58,6 +58,16 @@ enum Command {
     Report {
         /// Path to the JSONL report rows to aggregate.
         path: String,
+        /// Run the fault-routing step after aggregation (dry-run by
+        /// default): attach the additive `routed` summary to the
+        /// dashboard and write proposed-tickets.jsonl next to the report.
+        #[arg(long)]
+        route: bool,
+        /// File the proposed tickets in their mapped repositories
+        /// (explicit cross-repo write authorization, Phase 2).
+        /// Requires --route.
+        #[arg(long)]
+        file: bool,
     },
 }
 
@@ -93,7 +103,7 @@ fn main() -> std::process::ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Command::Report { path } => match run_report(&path) {
+        Command::Report { path, route, file } => match run_report(&path, route, file) {
             Ok(code) => code,
             Err(msg) => {
                 eprintln!("{msg}");
@@ -160,7 +170,8 @@ fn run_live(
 /// the channel map from the live scenario registry. Findings do not
 /// affect the exit code — the dashboard is the record, and nonzero
 /// exits are reserved for aggregation errors.
-fn run_report(path: &str) -> Result<ExitCode, String> {
+fn run_report(path: &str, route: bool, file: bool) -> Result<ExitCode, String> {
+    evallerina::report::validate_route_flags(route, file)?;
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read report rows from {path}: {e}"))?;
     let rows: Vec<serde_json::Value> = content

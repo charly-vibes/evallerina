@@ -17,6 +17,19 @@
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Validate the `report` subcommand's routing flags: `--file` (cross-repo
+/// write authorization, Phase 2) requires `--route` — filing proposed
+/// tickets only makes sense after the routing step ran. Any combination
+/// without `--file` is fine.
+pub fn validate_route_flags(route: bool, file: bool) -> Result<(), String> {
+    if file && !route {
+        return Err(
+            "--file requires --route: filing proposed tickets only makes sense after the routing step ran".into(),
+        );
+    }
+    Ok(())
+}
+
 /// Version of the dashboard shape. Additive evolution only within a
 /// version; breaking changes bump this.
 pub const DASHBOARD_VERSION: u32 = 1;

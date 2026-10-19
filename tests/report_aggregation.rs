@@ -419,6 +419,18 @@ fn empty_configured_registry_is_an_error() {
     assert!(aggregate_rows(&rows, &empty, &test_channel_of).is_err());
 }
 
+// ── CLI routing wiring (evallerina-o3j) ─────────────────────────────────────
+
+/// `--file` without `--route` is a loud error: filing is a cross-repo
+/// write that only makes sense after the routing step ran.
+#[test]
+fn file_without_route_is_an_error() {
+    assert!(evallerina::report::validate_route_flags(false, true).is_err());
+    assert!(evallerina::report::validate_route_flags(true, true).is_ok());
+    assert!(evallerina::report::validate_route_flags(true, false).is_ok());
+    assert!(evallerina::report::validate_route_flags(false, false).is_ok());
+}
+
 // ── registry wiring ─────────────────────────────────────────────────────────
 
 /// Every live scenario must declare the output channel its checks
