@@ -5,3 +5,7 @@ steps: []
 steps:
   - claim:7f2f65b2fa257edafb906397db68ffe96bd51fb8
   - brief:7f2f65b2fa257edafb906397db68ffe96bd51fb8
+  - spawn:574a31a5e92c638411e7798b661c4da9b25b984a
+  - verify:574a31a5e92c638411e7798b661c4da9b25b984a
+  - ship:574a31a5e92c638411e7798b661c4da9b25b984a
+  - stop:574a31a5e92c638411e7798b661c4da9b25b984a (run complete)
