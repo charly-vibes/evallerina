@@ -8,10 +8,14 @@
 //! cell (trial row or absent record) and exits nonzero only when a
 //! trial actually failed or malformed — skipped cells are the record.
 
+use std::io::Write;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
+use evallerina::ablation::{
+    AblationFactories, AixArtifacts, AixSource, ToolBinaries, run_ablation,
+};
 use evallerina::live::{OpenRouterTransport, RotationEvent, TrialStatus, run_rotation};
 use evallerina::recorded::RecordedTrajectory;
 use evallerina::registry::{DEFAULT_REPETITIONS, ordered_ids};
@@ -104,6 +108,17 @@ enum Command {
         file: bool,
     },
 }
+
+/// The hermetic static artifact set the full arm provisions by default
+/// (the ablated-arm baseline stays raw binaries either way). Real
+/// generation — the provisioned `wai` binary harvesting the actual
+/// managed AGENTS.md, `.genesis/tools.toml` and `llms.txt` — is opt-in
+/// via --real-artifacts (evallerina-0j8).
+const DEFAULT_AIX_ARTIFACTS: AixArtifacts = AixArtifacts {
+    llms_txt: "llms.txt content: wai status --json",
+    managed_agents_md: "<!-- WAI:START -->managed guidance<!-- WAI:END -->",
+    tools_toml: "[tools]\nwai = { cmd = \"wai\" }\n",
+};
 
 fn main() -> std::process::ExitCode {
     match Cli::parse().command {
@@ -260,10 +275,14 @@ fn run_report(path: &str, route: bool, file: bool) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// A/B ablation CLI handler: resolve the scenario and model list, run
-/// both arms via [`evallerina::ablation::run_ablation`], write the
-/// ArmReport JSONL rows, print the summary. Wired in evallerina-wdx.
-#[allow(unused_variables)]
+/// A/B ablation CLI handler (evallerina-wdx): resolve the named
+/// scenario and model list, run both arms via
+/// [`evallerina::ablation::run_ablation`], write the ArmReport JSONL
+/// rows (full arm first, then ablated, in run order), and print the
+/// per-arm summary + delta as JSON on stdout. Measurement, not a gate:
+/// the exit code is success whenever the ablation ran; errors — unknown
+/// scenario, artifact-path collision, generation failure, unwritable
+/// output — are loud and nonzero, never silent.
 fn run_ablate(
     scenario: &str,
     reps: u32,
@@ -273,5 +292,90 @@ fn run_ablate(
     budget_mins: u64,
     out: &str,
 ) -> Result<ExitCode, String> {
-    Err("ablate is not wired to run_ablation yet".to_owned())
+    let scenario = evallerina::scenario::live_scenario_by_name(scenario)?;
+    let models: Vec<String> = match model {
+        Some(id) => vec![id],
+        None => ordered_ids().into_iter().map(String::from).collect(),
+    };
+    let artifacts: AixSource<'static> = if real_artifacts {
+        let wai = ToolBinaries::discover_wai().ok_or_else(|| {
+            "real artifact generation requested but no `wai` binary is on PATH — refusing to fake it"
+                .to_owned()
+        })?;
+        AixSource::Real(ToolBinaries { wai })
+    } else {
+        AixSource::Static(&DEFAULT_AIX_ARTIFACTS)
+    };
+    // Dry-run: transports are constructed but never called — the zero
+    // budget records every cell absent before any trial starts. No
+    // key required, no network. Non-dry-run: the real tier-2
+    // transport, which refuses to start without OPENROUTER_API_KEY.
+    let report = if dry_run {
+        let mut full_factory = |m: &str| {
+            Ok(Box::new(OpenRouterTransport::new(m, "dry-run-no-network"))
+                as Box<dyn evallerina::live::Transport>)
+        };
+        let mut ablated_factory = |m: &str| {
+            Ok(Box::new(OpenRouterTransport::new(m, "dry-run-no-network"))
+                as Box<dyn evallerina::live::Transport>)
+        };
+        run_ablation(
+            &scenario,
+            &models,
+            reps,
+            artifacts,
+            AblationFactories {
+                full: &mut full_factory,
+                ablated: &mut ablated_factory,
+            },
+            &evallerina::live::Bounds::default(),
+            &|| false,
+        )
+    } else {
+        let start = Instant::now();
+        let budget = Duration::from_secs(budget_mins * 60);
+        let mut full_factory = |m: &str| {
+            OpenRouterTransport::from_env(m)
+                .map(|t| Box::new(t) as Box<dyn evallerina::live::Transport>)
+        };
+        let mut ablated_factory = |m: &str| {
+            OpenRouterTransport::from_env(m)
+                .map(|t| Box::new(t) as Box<dyn evallerina::live::Transport>)
+        };
+        run_ablation(
+            &scenario,
+            &models,
+            reps,
+            artifacts,
+            AblationFactories {
+                full: &mut full_factory,
+                ablated: &mut ablated_factory,
+            },
+            &evallerina::live::Bounds::default(),
+            &|| start.elapsed() < budget,
+        )
+    }?;
+
+    let mut rows = std::fs::File::create(out)
+        .map_err(|e| format!("cannot write report rows to {out}: {e}"))?;
+    for event in report.full_rows.iter().chain(&report.ablated_rows) {
+        writeln!(
+            rows,
+            "{}",
+            serde_json::to_string(event).expect("row serializes")
+        )
+        .map_err(|e| format!("cannot write report rows to {out}: {e}"))?;
+    }
+    let summary = serde_json::json!({
+        "ablation_version": report.ablation_version,
+        "scenario": report.scenario,
+        "full": report.full,
+        "ablated": report.ablated,
+        "delta": report.delta,
+    });
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&summary).expect("summary serializes")
+    );
+    Ok(ExitCode::SUCCESS)
 }
