@@ -90,3 +90,20 @@ fn agent_faults_are_never_routed() {
             .expect("routing succeeds");
     assert!(proposals.is_empty(), "agent faults must not produce proposals");
 }
+
+#[test]
+fn unmapped_tool_is_skipped_not_fatal() {
+    // Above threshold, but routing.toml has no [wai] entry here.
+    let empty_map = std::collections::BTreeMap::new();
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| trial_row("wai-hint-adherence-typo", "wai", m))
+        .collect();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &empty_map)
+        .expect("routing must not fail on an unmapped tool");
+    assert_eq!(proposals.len(), 1, "skipped is still recorded, not dropped");
+    let p = &proposals[0].to_json();
+    assert_eq!(p["decision"], "skipped");
+    assert_eq!(p["reason"], "unmapped_tool");
+    assert_eq!(p["repo"], serde_json::Value::Null);
+}
