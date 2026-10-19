@@ -148,7 +148,10 @@ pub fn propose(
 
         let model = row.get("model").and_then(serde_json::Value::as_str);
         for check in checks {
-            let name = check
+            // Validated for loudness even though routing keys on the
+            // scenario, not the check name (report.rs keys the matrix
+            // on it; routing's ticket granularity is the scenario).
+            let _name = check
                 .get("name")
                 .and_then(serde_json::Value::as_str)
                 .ok_or("check row lacks a `name` field")?;

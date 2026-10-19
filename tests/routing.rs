@@ -71,3 +71,22 @@ fn below_threshold_is_no_proposal() {
             .expect("routing succeeds");
     assert!(proposals.is_empty(), "below threshold → recorded, no action");
 }
+
+#[test]
+fn agent_faults_are_never_routed() {
+    // Failing checks WITH an ERR_* code are agent faults: they inform
+    // AIX-channel work in genesis (a human decision), never tickets.
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| {
+            let mut r = trial_row("wai-hint-adherence-typo", "wai", m);
+            r["checks"] = json!([{"name": "hint_followed", "passed": false,
+                                   "code": "ERR_ENVELOPE_HINT_BLINDNESS"}]);
+            r
+        })
+        .collect();
+    let proposals =
+        routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+            .expect("routing succeeds");
+    assert!(proposals.is_empty(), "agent faults must not produce proposals");
+}
