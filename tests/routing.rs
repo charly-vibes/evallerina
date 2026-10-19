@@ -42,8 +42,11 @@ impl Sandbox {
             "evallerina-routing-{}-{}-{}",
             tag,
             std::process::id(),
-            fixture_counter() + std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64,
+            fixture_counter()
+                + std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u64,
         ));
         std::fs::create_dir_all(&path).expect("create sandbox dir");
         Sandbox { path }
@@ -58,12 +61,13 @@ impl Sandbox {
 
     /// Create an issue via bd in this sandbox; returns the issue id.
     fn bd_create(&self, title: &str, body: &str) -> String {
-        let out = routing::run_bd(
-            &self.path,
-            &["create", title, "-d", body, "--json"],
-        )
-        .expect("bd create in sandbox");
-        assert!(out.status.success(), "bd create failed: {}", String::from_utf8_lossy(&out.stderr));
+        let out = routing::run_bd(&self.path, &["create", title, "-d", body, "--json"])
+            .expect("bd create in sandbox");
+        assert!(
+            out.status.success(),
+            "bd create failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("bd create --json");
         v["id"].as_str().expect("issue id").to_owned()
     }
@@ -102,15 +106,23 @@ impl BdSpy {
         BdSpy { calls: Vec::new() }
     }
 
-    fn runner(&mut self) -> impl FnMut(&std::path::Path, &[&str]) -> Result<std::process::Output, String> + '_ {
+    fn runner(
+        &mut self,
+    ) -> impl FnMut(&std::path::Path, &[&str]) -> Result<std::process::Output, String> + '_ {
         |cwd, args| {
-            self.calls.push((cwd.to_path_buf(), args.iter().map(|s| s.to_string()).collect()));
+            self.calls.push((
+                cwd.to_path_buf(),
+                args.iter().map(|s| s.to_string()).collect(),
+            ));
             routing::run_bd(cwd, args)
         }
     }
 
     fn create_calls(&self) -> Vec<&(PathBuf, Vec<String>)> {
-        self.calls.iter().filter(|(_, a)| a.first().map(String::as_str) == Some("create")).collect()
+        self.calls
+            .iter()
+            .filter(|(_, a)| a.first().map(String::as_str) == Some("create"))
+            .collect()
     }
 }
 
@@ -119,7 +131,11 @@ impl Sandbox {
     fn list_open_issues(&self) -> Vec<serde_json::Value> {
         let out = routing::run_bd(&self.path, &["list", "--status", "open", "--json"])
             .expect("bd list in sandbox");
-        assert!(out.status.success(), "bd list failed: {}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "bd list failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         serde_json::from_slice(&out.stdout).expect("bd list --json array")
     }
 }
@@ -357,10 +373,15 @@ fn open_issue_with_token_dedups_to_existing_without_creating() {
 
     assert_eq!(row.decision, "existing", "open issue with token → existing");
     assert_eq!(row.reason, None);
-    assert!(spy.create_calls().is_empty(), "dedup must invoke bd create zero times");
+    assert!(
+        spy.create_calls().is_empty(),
+        "dedup must invoke bd create zero times"
+    );
     // The dedup search pins the status filter (never searches closed).
     assert!(
-        spy.calls.iter().any(|(_, a)| a.contains(&"--status".to_owned()) && a.contains(&"open".to_owned())),
+        spy.calls
+            .iter()
+            .any(|(_, a)| a.contains(&"--status".to_owned()) && a.contains(&"open".to_owned())),
         "dedup search must pass --status open"
     );
     assert_eq!(row.bd_issue_id, None, "bd_issue_id is set only for filed");
@@ -378,7 +399,11 @@ fn closed_issue_does_not_block_refiling_a_regressed_fault() {
         &format!("fingerprint {token}"),
     );
     let out = routing::run_bd(&repo.path, &["close", &closed_id]).expect("bd close");
-    assert!(out.status.success(), "bd close failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "bd close failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let mut row = failable_row(token, &repo.path);
     let mut spy = BdSpy::new();
@@ -387,7 +412,10 @@ fn closed_issue_does_not_block_refiling_a_regressed_fault() {
 
     assert_eq!(row.decision, "filed", "closed must not block re-filing");
     assert_eq!(row.reason, None);
-    let new_id = row.bd_issue_id.as_deref().expect("filed captures the new issue id");
+    let new_id = row
+        .bd_issue_id
+        .as_deref()
+        .expect("filed captures the new issue id");
     assert_ne!(new_id, closed_id, "a NEW issue was filed");
     assert_eq!(spy.create_calls().len(), 1, "exactly one bd create");
 }
@@ -403,23 +431,44 @@ fn filing_invokes_bd_create_in_target_repo_cwd_and_captures_the_id() {
 
     assert_eq!(row.decision, "filed");
     assert_eq!(row.reason, None);
-    let id = row.bd_issue_id.as_deref().expect("exit code + issue id captured");
+    let id = row
+        .bd_issue_id
+        .as_deref()
+        .expect("exit code + issue id captured");
     // bd derives the issue prefix from the repo's directory name — the
     // id must carry the TARGET repo's prefix, not evallerina's.
     let repo_prefix = repo.path.file_name().unwrap().to_string_lossy();
-    assert!(id.starts_with(&*repo_prefix), "id belongs to the TARGET repo's tracker: {id}");
+    assert!(
+        id.starts_with(&*repo_prefix),
+        "id belongs to the TARGET repo's tracker: {id}"
+    );
 
     // Process-boundary: the create ran INSIDE the target repo cwd.
     let (cwd, args) = spy.create_calls()[0];
-    assert_eq!(cwd, &repo.path, "bd create runs with the target repo as cwd");
-    assert!(args.contains(&"--json".to_owned()), "create is machine-parsed");
+    assert_eq!(
+        cwd, &repo.path,
+        "bd create runs with the target repo as cwd"
+    );
+    assert!(
+        args.contains(&"--json".to_owned()),
+        "create is machine-parsed"
+    );
     // The fingerprint token goes in the ticket BODY.
-    let body_idx = args.iter().position(|a| a == "-d").expect("description flag present");
-    assert!(args[body_idx + 1].contains(token), "token in the ticket body");
+    let body_idx = args
+        .iter()
+        .position(|a| a == "-d")
+        .expect("description flag present");
+    assert!(
+        args[body_idx + 1].contains(token),
+        "token in the ticket body"
+    );
 
     // Cross-check through bd itself: the issue exists, open, with the token.
     let issues = repo.list_open_issues();
-    assert!(issues.iter().any(|i| i["id"].as_str() == Some(id)), "filed issue exists in target repo");
+    assert!(
+        issues.iter().any(|i| i["id"].as_str() == Some(id)),
+        "filed issue exists in target repo"
+    );
 }
 
 #[test]
@@ -434,13 +483,61 @@ fn filing_refreshes_tracked_export_in_target_repo() {
     let id = row.bd_issue_id.expect("filed");
 
     let jsonl_path = repo.path.join(".beads/issues.jsonl");
-    let jsonl = std::fs::read_to_string(&jsonl_path)
-        .expect("tracked export refreshed after create");
-    assert!(jsonl.contains(&id), "export contains the newly filed issue {id}");
+    let jsonl =
+        std::fs::read_to_string(&jsonl_path).expect("tracked export refreshed after create");
+    assert!(
+        jsonl.contains(&id),
+        "export contains the newly filed issue {id}"
+    );
 }
 
 fn spy_noop() -> impl FnMut(&std::path::Path, &[&str]) -> Result<std::process::Output, String> {
     routing::run_bd
+}
+
+#[test]
+fn bd_failure_in_target_repo_is_skipped_never_fatal() {
+    // Real non-beads dir (no bd init): bd create fails. The decision is
+    // skipped/bd_failure and filing completes — a broken tracker must
+    // not crash the rotation or mask what did not happen.
+    let not_a_beads_repo = Sandbox::fresh("bd-failure");
+    let token = "evallerina:wai-hint-adherence-typo:tool_fault";
+    let mut row = failable_row(token, &not_a_beads_repo.path);
+
+    // Return value is Ok: no error propagated to the report.
+    routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy_noop())
+        .expect("bd failure must never propagate as an error");
+
+    assert_eq!(row.decision, "skipped");
+    assert_eq!(row.reason.as_deref(), Some("bd_failure"));
+    assert_eq!(row.bd_issue_id, None, "no filing to claim");
+
+    // Other rows still processed after one failure.
+    let repo = Sandbox::with_beads("bd-failure-good");
+    let failing = failable_row("evallerina:fault-a:tool_fault", &not_a_beads_repo.path);
+    let healthy = failable_row("evallerina:fault-b:tool_fault", &repo.path);
+    let mut rows = [failing, healthy];
+    routing::file_proposals(&mut rows, true, &mut spy_noop()).expect("mixed repos still file");
+    let [failing, healthy] = &rows;
+    assert_eq!(failing.decision, "skipped");
+    assert_eq!(failing.reason.as_deref(), Some("bd_failure"));
+    assert_eq!(
+        healthy.decision, "filed",
+        "a healthy repo still files after a sibling failure"
+    );
+    assert!(healthy.bd_issue_id.is_some());
+}
+
+#[test]
+fn bd_search_spawns_may_fail_too_but_dedup_falls_back() {
+    // bd cannot even list here (no beads workspace): dedup finds
+    // nothing, create then fails => skipped/bd_failure, not an error.
+    let not_a_beads_repo = Sandbox::fresh("search-failure");
+    let mut row = failable_row("evallerina:sc:tool_fault", &not_a_beads_repo.path);
+    routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy_noop())
+        .expect("search failure must not propagate");
+    assert_eq!(row.decision, "skipped");
+    assert_eq!(row.reason.as_deref(), Some("bd_failure"));
 }
 
 #[test]

@@ -316,8 +316,7 @@ fn bd_issue_array(out: &std::process::Output) -> Option<Vec<serde_json::Value>> 
 /// or description (the fingerprint dedup match).
 fn any_issue_holds_token(issues: &[serde_json::Value], token: &str) -> bool {
     issues.iter().any(|i| {
-        let text = i["description"].as_str().unwrap_or("")
-            .to_owned()
+        let text = i["description"].as_str().unwrap_or("").to_owned()
             + "\n"
             + i["title"].as_str().unwrap_or("");
         text.contains(token)
