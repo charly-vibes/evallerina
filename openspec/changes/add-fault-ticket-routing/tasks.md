@@ -2,19 +2,19 @@
 
 ## 1. Routing module (dry-run first — red→green)
 
-- [ ] 1.1 Failing test: `tests/routing.rs` — propose from a fabricated
+- [x] 1.1 Failing test: `tests/routing.rs` — propose from a fabricated
   report with a tool fault ≥ threshold → `proposed-tickets.jsonl` rows with
   decision `dry_run`, correct token `evallerina:<scenario>:<fault-class>`
-- [ ] 1.2 Failing test: agent faults (`ERR_*`) produce zero proposals
-- [ ] 1.3 Implement `src/routing.rs`: threshold filter (reuse
+- [x] 1.2 Failing test: agent faults (`ERR_*`) produce zero proposals
+- [x] 1.3 Implement `src/routing.rs`: threshold filter (reuse
   `min(3, registry)` rule from report.rs), token builder, JSONL writer
-- [ ] 1.4 Failing test: unmapped tool → decision `skipped` + reason
-- [ ] 1.5 Failing test: proposals key the repo on the scenario's recorded
+- [x] 1.4 Failing test: unmapped tool → decision `skipped` + reason
+- [x] 1.5 Failing test: proposals key the repo on the scenario's recorded
   tool, not the report row's `tool` field (hardcoded in live rows)
-- [ ] 1.6 Implement `routing.toml` parsing (serde); relative paths resolve
+- [x] 1.6 Implement `routing.toml` parsing (serde); relative paths resolve
   against the evallerina repo root via `git rev-parse --show-toplevel`,
   absolute paths pass through (worktrees)
-- [ ] 1.7 Failing test: proposal rows carry the full schema (tool, repo,
+- [x] 1.7 Failing test: proposal rows carry the full schema (tool, repo,
   scenario, fault_class, token, decision, reason, bd_issue_id,
   row_provenance) — machine-checkable CI artifact
 
