@@ -185,6 +185,42 @@ fn real_generation_writes_managed_agents_md_with_wai_provenance() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Real generation: the fixture's `llms.txt` is the genesis-vibes
+/// `generate_llms_txt` output for the fixture tool set — title, module
+/// section markers, and the registered tool entries, never placeholder
+/// text. Runs for real wherever the tool is provisioned.
+#[test]
+fn real_generation_llms_txt_is_genesis_output_for_the_tool_set() {
+    let Some(wai) = ToolBinaries::discover_wai() else {
+        return; // no tool binaries provisioned → hermetic skip
+    };
+    let dir = unique_dir("real-llms-txt");
+    let generated =
+        AixArtifacts::for_fixture(&dir, &ToolBinaries { wai }).expect("wai init generates");
+    // The standardized concise format: `# {project}` title and the
+    // module listing of the registered fixture tool set.
+    assert!(
+        generated.llms_txt.starts_with("# "),
+        "llms.txt carries the project title: {}",
+        generated.llms_txt
+    );
+    assert!(
+        generated.llms_txt.contains("## Modules"),
+        "llms.txt carries the module section marker: {}",
+        generated.llms_txt
+    );
+    assert!(
+        generated.llms_txt.contains("`wai`"),
+        "llms.txt lists the registered tool: {}",
+        generated.llms_txt
+    );
+    assert!(
+        !generated.llms_txt.contains("wai status --json"),
+        "llms.txt is never the placeholder text"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 // ── the A/B shape ───────────────────────────────────────────────────────────
 
 /// The Must gate: an A/B report for one scenario with the delta

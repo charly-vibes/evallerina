@@ -102,14 +102,45 @@ impl AixArtifacts {
             .map_err(|e| format!("wai init produced no readable AGENTS.md: {e}"))?;
         let tools_toml = std::fs::read_to_string(fixture_dir.join(".genesis/tools.toml"))
             .map_err(|e| format!("wai init produced no readable .genesis/tools.toml: {e}"))?;
-        // llms.txt wires up in the next red/green step (genesis
-        // generate_llms_txt over the fixture tool set).
+        let llms_txt = llms_txt_for_fixture(fixture_dir)?;
         Ok(GeneratedAixArtifacts {
-            llms_txt: String::new(),
+            llms_txt,
             managed_agents_md,
             tools_toml,
         })
     }
+}
+
+/// The real `llms.txt` for the fixture tool set: genesis-vibes's
+/// `generate_llms_txt` over the tools the provisioned binary actually
+/// registered (read through genesis discovery), titled by the
+/// generation fixture's project name.
+fn llms_txt_for_fixture(fixture_dir: &Path) -> Result<String, String> {
+    let manifest = genesis::discovery::read_manifest(fixture_dir)
+        .ok_or("wai init left no readable .genesis/tools.toml manifest")?;
+    let mut modules: Vec<genesis::aix::ModuleEntry> = manifest
+        .tools
+        .into_iter()
+        .map(|(name, entry)| genesis::aix::ModuleEntry {
+            name,
+            description: entry.description,
+        })
+        .collect();
+    // Map iteration is unordered; the standardized listing is stable.
+    modules.sort_by(|a, b| a.name.cmp(&b.name));
+    let name = fixture_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("dulce-fixture")
+        .to_owned();
+    let meta = genesis::aix::ProjectMeta {
+        name,
+        tagline: "the dulce-de-leche tool family".to_owned(),
+        repository: None,
+        documentation: None,
+        crates_io: None,
+    };
+    Ok(genesis::aix::generate_llms_txt(&meta, &modules))
 }
 
 /// The provisioned tool binaries available for real artifact
