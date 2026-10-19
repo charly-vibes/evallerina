@@ -6,3 +6,7 @@ steps:
   - claim:04c3fd86173ded7063eacdc9580c953b350eb89f
   - brief:04c3fd86173ded7063eacdc9580c953b350eb89f
   - spawn:8f346feb3d83b725b4a8de4fd0c7a83f529f14a4
+  - verify:c4409f7101c42f9b8f50d929752acc46c2b8b073
+  - ship:c4409f7101c42f9b8f50d929752acc46c2b8b073
+  - stop:c4409f7101c42f9b8f50d929752acc46c2b8b073 (run complete)
+  - stop-final:c4409f7101c42f9b8f50d929752acc46c2b8b073
