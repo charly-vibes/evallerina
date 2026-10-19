@@ -107,3 +107,28 @@ fn unmapped_tool_is_skipped_not_fatal() {
     assert_eq!(p["reason"], "unmapped_tool");
     assert_eq!(p["repo"], serde_json::Value::Null);
 }
+
+#[test]
+fn repo_keys_on_recorded_tool_not_row_tool() {
+    // Live rows hardcode tool: "wai" (src/live.rs); a drifted row tool
+    // (the hhs bug class) must never send the ticket to the wrong repo.
+    // routing.toml here maps "dont" only — the scenario's recorded tool.
+    let mut drifted_map = std::collections::BTreeMap::new();
+    drifted_map.insert("dont".to_owned(), "../dont".to_owned());
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| {
+            // Row tool says "wai"; scenario definition recorded "dont".
+            trial_row("dont-hint-adherence-lifecycle", "wai", m)
+        })
+        .collect();
+    let recorded_dont = |s: &str| (s == "dont-hint-adherence-lifecycle").then(|| "dont".to_owned());
+    let proposals = routing::propose(&rows, &three_models(), &recorded_dont, &drifted_map)
+        .expect("routing succeeds");
+    assert_eq!(proposals.len(), 1);
+    let p = &proposals[0].to_json();
+    assert_eq!(p["tool"], "dont", "repo keyed on recorded tool");
+    assert_eq!(p["repo"], "../dont");
+    // The drifted row tool survives as provenance only.
+    assert_eq!(p["row_provenance"][0]["tool"], "wai");
+}
