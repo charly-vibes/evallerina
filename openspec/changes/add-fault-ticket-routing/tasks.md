@@ -20,16 +20,16 @@
 
 ## 2. Filing path (separate red→green cycle)
 
-- [ ] 2.1 Failing test: dedup — temp dir with `bd init`, seed an open issue
+- [x] 2.1 Failing test: dedup — temp dir with `bd init`, seed an open issue
   containing the token → decision `existing`, zero `bd create` calls
-- [ ] 2.2 Failing test: only a CLOSED issue contains the token → new issue
+- [x] 2.2 Failing test: only a CLOSED issue contains the token → new issue
   proposed and filed (closed must not block re-filing a regressed fault)
-- [ ] 2.3 Implement target-repo search: `bd search --status open <token>`
+- [x] 2.3 Implement target-repo search: `bd search --status open <token>`
   (list + grep fallback with the same status filter)
-- [ ] 2.4 Failing test: `--file` on a mapped tool invokes `bd create` in the
+- [x] 2.4 Failing test: `--file` on a mapped tool invokes `bd create` in the
   target repo cwd (temp repo with beads initialized), captures issue id
-- [ ] 2.5 Implement `bd create` invocation with exit-code + id capture
-- [ ] 2.6 Failing test: `bd create` fails in target repo (non-beads dir) →
+- [x] 2.5 Implement `bd create` invocation with exit-code + id capture
+- [x] 2.6 Failing test: `bd create` fails in target repo (non-beads dir) →
   decision `skipped` reason `bd_failure`, report still succeeds
 
 ## 3. CLI + report wiring
