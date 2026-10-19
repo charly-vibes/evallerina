@@ -479,6 +479,50 @@ fn route_dry_run_attaches_routed_summary_additively() {
     assert!(dashboard.get("score").is_none());
 }
 
+/// End-to-end CLI contract: `evallerina report rows.jsonl` WITHOUT
+/// --route carries no `routed` field and writes no jsonl — routing is
+/// strictly opt-in, the dashboard is unchanged.
+#[test]
+fn report_without_route_has_no_routed_field_and_no_jsonl() {
+    let sandbox = std::env::temp_dir().join(format!(
+        "evallerina-o3j-noroute-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&sandbox).expect("create sandbox");
+    let rows = json!({
+        "kind": "trial",
+        "report_version": 1,
+        "scenario": "wai-hint-adherence-typo",
+        "tool": "wai",
+        "status": "failed",
+        "checks": [{"name": "check-b", "passed": false, "reason": "envelope missing"}],
+        "model": "m1",
+        "repetition": 0
+    })
+    .to_string();
+    std::fs::write(sandbox.join("rows.jsonl"), rows).expect("write rows");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_evallerina"))
+        .args(["report", "rows.jsonl"])
+        .current_dir(&sandbox)
+        .output()
+        .expect("run report");
+    assert!(out.status.success());
+    let dashboard: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("dashboard JSON on stdout");
+    assert!(dashboard.get("routed").is_none(), "no routed field without --route");
+    assert!(
+        !sandbox.join("proposed-tickets.jsonl").exists(),
+        "no proposed-tickets.jsonl without --route"
+    );
+
+    std::fs::remove_dir_all(&sandbox).ok();
+}
+
 /// End-to-end CLI contract: `evallerina report rows.jsonl --route`
 /// prints a dashboard whose `routed` summary has dry_run > 0, keeps
 /// report_version 1, and writes proposed-tickets.jsonl next to the
