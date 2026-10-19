@@ -1,6 +1,7 @@
 ticket: evallerina-l8w
 branch: main
-brief_path:
+brief_path: .wai/projects/evallerina/briefs/evallerina-l8w.md
 steps:
   - claim:7999461c24dd63402cdb80b56c20f2cba052fd6f
   - gates:5f856498476e4eec58134463734d839f330e718d
+  - brief:f306f8634f6110dff7c3a6115db664d5b0d87f2c
