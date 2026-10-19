@@ -114,6 +114,16 @@ impl BdSpy {
     }
 }
 
+impl Sandbox {
+    /// All open issues in this sandbox, parsed from `bd list --status open --json`.
+    fn list_open_issues(&self) -> Vec<serde_json::Value> {
+        let out = routing::run_bd(&self.path, &["list", "--status", "open", "--json"])
+            .expect("bd list in sandbox");
+        assert!(out.status.success(), "bd list failed: {}", String::from_utf8_lossy(&out.stderr));
+        serde_json::from_slice(&out.stdout).expect("bd list --json array")
+    }
+}
+
 /// A tier-2 trial row with a failing, code-less check (tool fault) for
 /// one model. `row_tool` is the report row's tool field (hardcoded in
 /// live rows); `recorded` is the scenario definition's recorded tool.
@@ -380,6 +390,57 @@ fn closed_issue_does_not_block_refiling_a_regressed_fault() {
     let new_id = row.bd_issue_id.as_deref().expect("filed captures the new issue id");
     assert_ne!(new_id, closed_id, "a NEW issue was filed");
     assert_eq!(spy.create_calls().len(), 1, "exactly one bd create");
+}
+
+#[test]
+fn filing_invokes_bd_create_in_target_repo_cwd_and_captures_the_id() {
+    let repo = Sandbox::with_beads("create-cwd");
+    let token = "evallerina:wai-hint-adherence-typo:tool_fault";
+    let mut row = failable_row(token, &repo.path);
+    let mut spy = BdSpy::new();
+    routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy.runner())
+        .expect("filing in a beads-initialized repo must succeed");
+
+    assert_eq!(row.decision, "filed");
+    assert_eq!(row.reason, None);
+    let id = row.bd_issue_id.as_deref().expect("exit code + issue id captured");
+    // bd derives the issue prefix from the repo's directory name — the
+    // id must carry the TARGET repo's prefix, not evallerina's.
+    let repo_prefix = repo.path.file_name().unwrap().to_string_lossy();
+    assert!(id.starts_with(&*repo_prefix), "id belongs to the TARGET repo's tracker: {id}");
+
+    // Process-boundary: the create ran INSIDE the target repo cwd.
+    let (cwd, args) = spy.create_calls()[0];
+    assert_eq!(cwd, &repo.path, "bd create runs with the target repo as cwd");
+    assert!(args.contains(&"--json".to_owned()), "create is machine-parsed");
+    // The fingerprint token goes in the ticket BODY.
+    let body_idx = args.iter().position(|a| a == "-d").expect("description flag present");
+    assert!(args[body_idx + 1].contains(token), "token in the ticket body");
+
+    // Cross-check through bd itself: the issue exists, open, with the token.
+    let issues = repo.list_open_issues();
+    assert!(issues.iter().any(|i| i["id"].as_str() == Some(id)), "filed issue exists in target repo");
+}
+
+#[test]
+fn filing_refreshes_tracked_export_in_target_repo() {
+    // Tracked-export invariant: after a successful create, the target
+    // repo's .beads/issues.jsonl is the fresh source of truth.
+    let repo = Sandbox::with_beads("create-export");
+    let token = "evallerina:wai-hint-adherence-typo:tool_fault";
+    let mut row = failable_row(token, &repo.path);
+    routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy_noop())
+        .expect("filing succeeds");
+    let id = row.bd_issue_id.expect("filed");
+
+    let jsonl_path = repo.path.join(".beads/issues.jsonl");
+    let jsonl = std::fs::read_to_string(&jsonl_path)
+        .expect("tracked export refreshed after create");
+    assert!(jsonl.contains(&id), "export contains the newly filed issue {id}");
+}
+
+fn spy_noop() -> impl FnMut(&std::path::Path, &[&str]) -> Result<std::process::Output, String> {
+    routing::run_bd
 }
 
 #[test]
