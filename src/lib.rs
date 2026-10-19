@@ -17,4 +17,5 @@ pub mod live;
 pub mod recorded;
 pub mod registry;
 pub mod report;
+pub mod routing;
 pub mod scenario;
