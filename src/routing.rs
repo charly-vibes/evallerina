@@ -10,7 +10,15 @@
 //! `evallerina:<scenario>:<fault-class>` and the full machine-checkable
 //! schema. Phase 1 is dry-run only: every emitted decision is `dry_run`
 //! (mapped tool) or `skipped`/`unmapped_tool` — no `bd` invocations
-//! happen here (filing is evallerina-2bz).
+//! happen in the dry-run path. Phase 2 (evallerina-2bz) adds the filing
+//! path behind explicit authorization: fingerprint-token dedup in the
+//! target repo (`--status open` always pinned — closed issues must not
+//! block re-filing a regressed fault), then `bd create` in the target
+//! repo cwd with exit-code + id capture, then the tracked-export
+//! invariant (`bd export -o .beads/issues.jsonl`). Every bd invocation
+//! is routed through `run_bd` (cwd-scoped subprocess) and is injectable
+//! so tests can spy on calls; `bd` failure is `skipped`/`bd_failure`,
+//! never fatal — filing is an optimization over the report.
 //! Rationale: the fault taxonomy routes tool faults to tickets in the
 //! tool's repo, but the value that made evallerina useful (evallerina-2rr,
 //! -00n, -54f) all required hand-filing from dashboard findings. Routing
@@ -273,6 +281,141 @@ pub fn to_jsonl(proposals: &[ProposalRow]) -> String {
         out.push('\n');
     }
     out
+}
+
+/// The result of one bd invocation: exit code + streams, or a spawn
+/// error string. Process-boundary principle: callers assert on these,
+/// never on bd internals.
+pub type BdResult = Result<std::process::Output, String>;
+
+/// Run `bd` with `args` in `cwd` (the target repo). Every bd operation
+/// in routing happens through here so the cwd is always explicit and
+/// tests can inject a spy.
+pub fn run_bd(cwd: &std::path::Path, args: &[&str]) -> BdResult {
+    std::process::Command::new("bd")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| format!("cannot run bd: {e}"))
+}
+
+/// The bd runner abstraction passed to `file_proposals`.
+pub type BdRunner<'a> = dyn FnMut(&std::path::Path, &[&str]) -> BdResult + 'a;
+
+/// True when the bd output is a successful JSON array with ≥1 issue.
+fn bd_issue_array(out: &std::process::Output) -> Option<Vec<serde_json::Value>> {
+    if !out.status.success() {
+        return None;
+    }
+    serde_json::from_slice::<Vec<serde_json::Value>>(&out.stdout)
+        .ok()
+        .filter(|v| !v.is_empty())
+}
+
+/// True when any issue in the JSON array carries `token` in its title
+/// or description (the fingerprint dedup match).
+fn any_issue_holds_token(issues: &[serde_json::Value], token: &str) -> bool {
+    issues.iter().any(|i| {
+        let text = i["description"].as_str().unwrap_or("")
+            .to_owned()
+            + "\n"
+            + i["title"].as_str().unwrap_or("");
+        text.contains(token)
+    })
+}
+
+/// File authorized proposals into their mapped repos (Phase 2,
+/// `--file`): fingerprint-token dedup, then `bd create` in the target
+/// repo cwd. Mutates each row's decision/reason/bd_issue_id in place:
+///
+/// - open issue in the target repo holds the token → `existing` (zero
+///   `bd create` calls; the dedup search always pins `--status open`,
+///   so a closed ticket never suppresses a regressed fault),
+/// - no open match → `bd create` there → `filed` with the new issue
+///   id, followed by `bd export -o .beads/issues.jsonl` (tracked-export
+///   invariant),
+/// - `bd create` fails (not a beads repo, binary missing, locked) →
+///   `skipped` with reason `bd_failure` — never an error return; filing
+///   is an optimization over the report.
+///
+/// `file_authorized=false` is the dry-run default: no bd calls at all.
+/// Rows already `skipped`/`unmapped_tool` or with no mapped repo are
+/// untouched.
+pub fn file_proposals(
+    proposals: &mut [ProposalRow],
+    file_authorized: bool,
+    run_bd: &mut BdRunner,
+) -> Result<(), String> {
+    if !file_authorized {
+        return Ok(());
+    }
+    for row in proposals.iter_mut() {
+        if row.decision != "dry_run" {
+            continue;
+        }
+        let Some(repo) = row.repo.clone() else {
+            continue;
+        };
+        let cwd = std::path::PathBuf::from(&repo);
+
+        // Dedup: `bd search <token> --status open --json` first (title
+        // search); the token lives in the issue BODY, so fall back to
+        // `bd list --status open --json` + grep — same status filter.
+        let search = run_bd(&cwd, &["search", &row.token, "--status", "open", "--json"])
+            .ok()
+            .and_then(|out| bd_issue_array(&out));
+        let found = match search {
+            Some(issues) if any_issue_holds_token(&issues, &row.token) => true,
+            _ => run_bd(&cwd, &["list", "--status", "open", "--json"])
+                .ok()
+                .and_then(|out| bd_issue_array(&out))
+                .map(|issues| any_issue_holds_token(&issues, &row.token))
+                .unwrap_or(false),
+        };
+        if found {
+            row.decision = "existing".to_owned();
+            row.reason = None;
+            continue; // bd_issue_id stays null: set only for `filed`.
+        }
+
+        // File: `bd create` in the target repo cwd, exit code + id.
+        let title = format!("[evallerina] {}: {}", row.fault_class, row.scenario);
+        let body = format!(
+            "{}\ntool: {}\nfiled by evallerina fault routing (openspec add-fault-ticket-routing)",
+            row.token, row.tool
+        );
+        match run_bd(&cwd, &["create", &title, "-d", &body, "--json"]) {
+            Ok(out) if out.status.success() => {
+                let id = serde_json::from_slice::<serde_json::Value>(&out.stdout)
+                    .ok()
+                    .and_then(|v| v["id"].as_str().map(String::from));
+                match id {
+                    Some(id) => {
+                        row.decision = "filed".to_owned();
+                        row.reason = None;
+                        row.bd_issue_id = Some(id);
+                        // Tracked-export invariant: refresh the JSONL
+                        // source of truth after a successful create.
+                        // Export failure is not fatal to the report.
+                        let _ = run_bd(&cwd, &["export", "-o", ".beads/issues.jsonl"]);
+                    }
+                    // Create succeeded but the id is unparseable — treat
+                    // as a bd failure rather than claim a filing we
+                    // cannot link (follow-up threshold: no per-version
+                    // output-format parsers).
+                    None => {
+                        row.decision = "skipped".to_owned();
+                        row.reason = Some("bd_failure".to_owned());
+                    }
+                }
+            }
+            Ok(_) | Err(_) => {
+                row.decision = "skipped".to_owned();
+                row.reason = Some("bd_failure".to_owned());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Discover the evallerina repo root (worktree-safe) for relative

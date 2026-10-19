@@ -12,6 +12,107 @@
 
 use evallerina::routing;
 use serde_json::json;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+// ---------------------------------------------------------------------------
+// Isolation fixtures: ALL bd operations in these tests run inside a
+// per-test temp dir created under std::env::temp_dir(). The trackers of
+// evallerina and every family repo (wai/genesis/espectacular/dont) are
+// NEVER touched. bd search-style dedup always pins --status open.
+// ---------------------------------------------------------------------------
+
+/// Serialize per-test fixture dirs even under `cargo test` parallelism.
+fn fixture_counter() -> u64 {
+    static COUNTER: OnceLock<Mutex<u64>> = OnceLock::new();
+    let mut c = COUNTER.get_or_init(|| Mutex::new(0)).lock().unwrap();
+    *c += 1;
+    *c
+}
+
+/// An isolated temp sandbox. Deleted on drop.
+struct Sandbox {
+    path: PathBuf,
+}
+
+impl Sandbox {
+    /// Fresh unique dir under std::env::temp_dir().
+    fn fresh(tag: &str) -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "evallerina-routing-{}-{}-{}",
+            tag,
+            std::process::id(),
+            fixture_counter() + std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64,
+        ));
+        std::fs::create_dir_all(&path).expect("create sandbox dir");
+        Sandbox { path }
+    }
+
+    /// A sandbox with beads initialized (`bd init` inside the sandbox).
+    fn with_beads(tag: &str) -> Self {
+        let sb = Sandbox::fresh(tag);
+        routing::run_bd(&sb.path, &["init"]).expect("bd init in sandbox");
+        sb
+    }
+
+    /// Create an issue via bd in this sandbox; returns the issue id.
+    fn bd_create(&self, title: &str, body: &str) -> String {
+        let out = routing::run_bd(
+            &self.path,
+            &["create", title, "-d", body, "--json"],
+        )
+        .expect("bd create in sandbox");
+        assert!(out.status.success(), "bd create failed: {}", String::from_utf8_lossy(&out.stderr));
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("bd create --json");
+        v["id"].as_str().expect("issue id").to_owned()
+    }
+}
+
+impl Drop for Sandbox {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+/// A proposal row ready for filing into `repo` (dry_run, mapped tool).
+fn failable_row(token: &str, repo: &std::path::Path) -> routing::ProposalRow {
+    routing::ProposalRow {
+        tool: "wai".to_owned(),
+        repo: Some(repo.to_string_lossy().into_owned()),
+        scenario: "wai-hint-adherence-typo".to_owned(),
+        fault_class: "tool_fault".to_owned(),
+        token: token.to_owned(),
+        decision: "dry_run".to_owned(),
+        reason: None,
+        bd_issue_id: None,
+        row_provenance: vec![],
+    }
+}
+
+/// A recording bd runner: delegates to the real `bd` (process boundary:
+/// assert on exit codes + parsed ids) while capturing every invocation
+/// so tests can assert on calls (e.g. zero `bd create`).
+struct BdSpy {
+    calls: Vec<(PathBuf, Vec<String>)>,
+}
+
+impl BdSpy {
+    fn new() -> Self {
+        BdSpy { calls: Vec::new() }
+    }
+
+    fn runner(&mut self) -> impl FnMut(&std::path::Path, &[&str]) -> Result<std::process::Output, String> + '_ {
+        |cwd, args| {
+            self.calls.push((cwd.to_path_buf(), args.iter().map(|s| s.to_string()).collect()));
+            routing::run_bd(cwd, args)
+        }
+    }
+
+    fn create_calls(&self) -> Vec<&(PathBuf, Vec<String>)> {
+        self.calls.iter().filter(|(_, a)| a.first().map(String::as_str) == Some("create")).collect()
+    }
+}
 
 /// A tier-2 trial row with a failing, code-less check (tool fault) for
 /// one model. `row_tool` is the report row's tool field (hardcoded in
@@ -226,6 +327,33 @@ fn every_proposal_row_carries_the_full_schema() {
             }
         }
     }
+}
+
+#[test]
+fn open_issue_with_token_dedups_to_existing_without_creating() {
+    let repo = Sandbox::with_beads("dedup-open");
+    let token = "evallerina:wai-hint-adherence-typo:tool_fault";
+    // Seed: an OPEN issue whose body carries the fingerprint token.
+    let existing_id = repo.bd_create(
+        "wai-hint-adherence-typo: tool_fault",
+        &format!("fingerprint {token}"),
+    );
+    let _ = existing_id;
+
+    let mut row = failable_row(token, &repo.path);
+    let mut spy = BdSpy::new();
+    routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy.runner())
+        .expect("filing must not fail on a dedup hit");
+
+    assert_eq!(row.decision, "existing", "open issue with token → existing");
+    assert_eq!(row.reason, None);
+    assert!(spy.create_calls().is_empty(), "dedup must invoke bd create zero times");
+    // The dedup search pins the status filter (never searches closed).
+    assert!(
+        spy.calls.iter().any(|(_, a)| a.contains(&"--status".to_owned()) && a.contains(&"open".to_owned())),
+        "dedup search must pass --status open"
+    );
+    assert_eq!(row.bd_issue_id, None, "bd_issue_id is set only for filed");
 }
 
 #[test]
