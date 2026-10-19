@@ -1,0 +1,18 @@
+# routing.toml — fault→ticket routing map (openspec add-fault-ticket-routing)
+# Maps each dulce-de-leche family tool to the repository its tickets live in.
+# Relative paths resolve against the evallerina repo root (git rev-parse
+# --show-toplevel, worktree-safe); absolute paths pass through (target-repo
+# worktrees). Filing is evallerina-2bz; dry-run proposals reference these
+# paths from Phase 1 onward.
+
+[wai]
+repo = "../wai"
+
+[genesis]
+repo = "../genesis"
+
+[espectacular]
+repo = "../espectacular"
+
+[dont]
+repo = "../dont"

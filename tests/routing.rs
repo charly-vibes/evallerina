@@ -132,3 +132,36 @@ fn repo_keys_on_recorded_tool_not_row_tool() {
     // The drifted row tool survives as provenance only.
     assert_eq!(p["row_provenance"][0]["tool"], "wai");
 }
+
+#[test]
+fn routing_toml_parses_tools_to_repos() {
+    let toml_src = "[wai]\nrepo = \"../wai\"\n\n[genesis]\nrepo = \"../genesis\"\n";
+    let map = routing::parse_routing_toml(toml_src).expect("parses");
+    assert_eq!(map.get("wai").map(String::as_str), Some("../wai"));
+    assert_eq!(map.get("genesis").map(String::as_str), Some("../genesis"));
+}
+
+#[test]
+fn routing_toml_missing_repo_is_loud() {
+    let err = routing::parse_routing_toml("[wai]\ndescription = \"no repo\"\n")
+        .expect_err("missing repo is a loud error");
+    assert!(err.contains("repo"));
+}
+
+#[test]
+fn relative_repo_resolves_against_evallerina_root() {
+    let root = std::path::Path::new("/worktrees/evallerina");
+    assert_eq!(
+        routing::resolve_repo("../wai", root),
+        "/worktrees/evallerina/../wai"
+    );
+}
+
+#[test]
+fn absolute_repo_passes_through_for_worktrees() {
+    let root = std::path::Path::new("/worktrees/evallerina");
+    assert_eq!(
+        routing::resolve_repo("/para/worktrees/wai", root),
+        "/para/worktrees/wai"
+    );
+}
