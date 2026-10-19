@@ -1,4 +1,5 @@
-ticket: evallerina-rxs
-branch: main
-brief_path:
-steps: []
+steps:
+  - claim:32b61adffc013a9843b62ab999b38d0703d9b5b2
+  - smoke:32b61adffc013a9843b62ab999b38d0703d9b5b2 (lane:review lead-side; MUST GATE PASS)
+  - ship:32b61adffc013a9843b62ab999b38d0703d9b5b2
+  - stop:32b61adffc013a9843b62ab999b38d0703d9b5b2 (run complete)

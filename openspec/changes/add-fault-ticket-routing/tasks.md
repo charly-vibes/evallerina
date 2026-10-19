@@ -44,8 +44,8 @@
 
 ## 4. Validation
 
-- [ ] 4.1 `just tier0` green (fmt/clippy/test)
-- [ ] 4.2 `just tier1` replay unchanged (routing touches report post-processing
+- [x] 4.1 `just tier0` green (fmt/clippy/test)
+- [x] 4.2 `just tier1` replay unchanged (routing touches report post-processing
   only)
-- [ ] 4.3 Manual smoke: dry-run against latest tier-2 rows produces sensible
+- [x] 4.3 Manual smoke: dry-run against latest tier-2 rows produces sensible
   proposals (compare against the hand-filed evallerina-54f precedent)

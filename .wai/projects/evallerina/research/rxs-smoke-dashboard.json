@@ -1,0 +1,90 @@
+{
+  "configured_models": [
+    "openrouter/free",
+    "deepseek/deepseek-v4-flash:free",
+    "qwen/qwen3-coder:free",
+    "meta-llama/llama-3.3-70b-instruct:free"
+  ],
+  "coverage": {
+    "absent": 0,
+    "checks_failed": 3,
+    "checks_passed": 0,
+    "failed": 3,
+    "http_error": 0,
+    "invalid_output": 1,
+    "non_tier2": 0,
+    "passed": 0,
+    "rate_limited": 0,
+    "trials": 4
+  },
+  "dashboard_version": 1,
+  "matrix": [
+    {
+      "channel": "suggestions",
+      "code": "ERR_ACTION_FORMAT_VIOLATION",
+      "model": "openrouter/free-a",
+      "occurrences": 1,
+      "scenarios": [
+        "wai-hint-adherence-typo"
+      ]
+    },
+    {
+      "channel": "suggestions",
+      "code": "hint_followed",
+      "model": "openrouter/free-a",
+      "occurrences": 1,
+      "scenarios": [
+        "wai-hint-adherence-typo"
+      ]
+    },
+    {
+      "channel": "suggestions",
+      "code": "hint_followed",
+      "model": "openrouter/free-b",
+      "occurrences": 1,
+      "scenarios": [
+        "wai-hint-adherence-typo"
+      ]
+    },
+    {
+      "channel": "suggestions",
+      "code": "hint_followed",
+      "model": "openrouter/free-c",
+      "occurrences": 1,
+      "scenarios": [
+        "wai-hint-adherence-typo"
+      ]
+    }
+  ],
+  "report_version": 1,
+  "routed": {
+    "dry_run": 1,
+    "existing": 0,
+    "filed": 0,
+    "skipped": 0
+  },
+  "routing": [
+    {
+      "channel": "suggestions",
+      "code": "ERR_ACTION_FORMAT_VIOLATION",
+      "distinct_models": 1,
+      "kind": "recorded-no-action",
+      "occurrences": 1,
+      "scenarios": [
+        "wai-hint-adherence-typo"
+      ]
+    },
+    {
+      "channel": "suggestions",
+      "check": "hint_followed",
+      "distinct_models": 3,
+      "kind": "tool-ticket",
+      "occurrences": 3,
+      "scenarios": [
+        "wai-hint-adherence-typo"
+      ],
+      "tool": "wai"
+    }
+  ],
+  "routing_threshold": 3
+}
