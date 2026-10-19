@@ -69,7 +69,7 @@ mod tests {
         let free_count = free_ids().len();
         for (i, id) in ids.iter().take(free_count).enumerate() {
             assert!(
-                free_ids().contains(&id),
+                free_ids().contains(id),
                 "first {free_count} ids must be free-tier, position {i} is {id}"
             );
         }
@@ -88,6 +88,6 @@ mod tests {
     /// Repetition policy: at least three per cell.
     #[test]
     fn default_repetitions_at_least_three() {
-        assert!(DEFAULT_REPETITIONS >= 3);
+        const { assert!(DEFAULT_REPETITIONS >= 3) };
     }
 }

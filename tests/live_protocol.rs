@@ -375,7 +375,7 @@ fn turn_cap_stops_trial_with_bound_named() {
     .expect("trial runs");
 
     assert_eq!(report.status, TrialStatus::Failed);
-    assert_eq!(report.reached_bound.as_deref(), Some("turn_cap"));
+    assert_eq!(report.reached_bound, Some("turn_cap"));
     let rendered = serde_json::to_string(&report).unwrap();
     assert!(
         !rendered.contains("ERR_"),
@@ -403,7 +403,7 @@ fn token_budget_stops_trial_with_bound_named() {
     .expect("trial runs");
 
     assert_eq!(report.status, TrialStatus::Failed);
-    assert_eq!(report.reached_bound.as_deref(), Some("token_budget"));
+    assert_eq!(report.reached_bound, Some("token_budget"));
 }
 
 /// The wall-clock per-command timeout terminates a runaway process and
@@ -514,7 +514,7 @@ fn report_row_carries_attribution_and_bounds() {
     );
     // Per-check outcomes present (passing checks included).
     assert!(
-        rendered["checks"].as_array().unwrap().len() >= 1,
+        !rendered["checks"].as_array().unwrap().is_empty(),
         "one entry per declared check: {rendered}"
     );
 }
