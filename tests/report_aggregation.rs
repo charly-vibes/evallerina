@@ -431,6 +431,124 @@ fn file_without_route_is_an_error() {
     assert!(evallerina::report::validate_route_flags(false, false).is_ok());
 }
 
+/// `report --route` (dry-run) on a fabricated rows file: the additive
+/// `routed` summary is present with the dry_run count, report_version
+/// stays 1, and no field was replaced (dashboard_version unchanged,
+/// still no aggregate score).
+#[test]
+fn route_dry_run_attaches_routed_summary_additively() {
+    let rows = ["m1", "m2", "m3"]
+        .iter()
+        .map(|m| {
+            trial(
+                "wai-hint-adherence-typo",
+                m,
+                "failed",
+                json!([tool_fault()]),
+            )
+        })
+        .collect::<Vec<_>>();
+    let configured = models(3);
+    let mut dashboard = aggregate_rows(&rows, &configured, &test_channel_of).expect("aggregates");
+    let repo_map = [("wai".to_owned(), "../wai".to_owned())].into();
+    let mut runner =
+        |_: &std::path::Path, _: &[&str]| panic!("dry-run routing must never invoke bd");
+    let proposals = evallerina::report::attach_routing(
+        &mut dashboard,
+        &rows,
+        &configured,
+        &repo_map,
+        false,
+        &mut runner,
+    )
+    .expect("routing succeeds");
+    // Additive: the routed summary carries the dry-run decision counts.
+    assert_eq!(dashboard["routed"]["dry_run"], 1);
+    assert_eq!(dashboard["routed"]["filed"], 0);
+    assert_eq!(dashboard["routed"]["existing"], 0);
+    assert_eq!(dashboard["routed"]["skipped"], 0);
+    // The proposal matches the proposed-tickets.jsonl schema.
+    assert_eq!(proposals.len(), 1);
+    assert_eq!(
+        proposals[0].token,
+        "evallerina:wai-hint-adherence-typo:tool_fault"
+    );
+    // Anti-goals held: report_version still 1, no aggregate score.
+    assert_eq!(dashboard["report_version"], 1);
+    assert_eq!(dashboard["dashboard_version"], DASHBOARD_VERSION);
+    assert!(dashboard.get("score").is_none());
+}
+
+/// End-to-end CLI contract: `evallerina report rows.jsonl --route`
+/// prints a dashboard whose `routed` summary has dry_run > 0, keeps
+/// report_version 1, and writes proposed-tickets.jsonl next to the
+/// report. Runs in a temp sandbox with a copy of routing.toml so no
+/// tracked file or family repo is touched.
+#[test]
+fn report_route_dry_run_writes_proposed_tickets_jsonl() {
+    let sandbox = std::env::temp_dir().join(format!(
+        "evallerina-o3j-route-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&sandbox).expect("create sandbox");
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/routing.toml"),
+        sandbox.join("routing.toml"),
+    )
+    .expect("copy routing.toml into sandbox");
+    let rows = ["m1", "m2", "m3"]
+        .iter()
+        .map(|m| {
+            json!({
+                "kind": "trial",
+                "report_version": 1,
+                "scenario": "wai-hint-adherence-typo",
+                "tool": "wai",
+                "status": "failed",
+                "checks": [{"name": "check-b", "passed": false, "reason": "envelope missing"}],
+                "model": m,
+                "repetition": 0
+            })
+        })
+        .collect::<Vec<_>>()
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .join("\n");
+    std::fs::write(sandbox.join("rows.jsonl"), rows).expect("write rows");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_evallerina"))
+        .args(["report", "rows.jsonl", "--route"])
+        .current_dir(&sandbox)
+        .output()
+        .expect("run report --route");
+    assert!(out.status.success(), "report --route succeeds");
+    let dashboard: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("dashboard JSON on stdout");
+    assert_eq!(dashboard["routed"]["dry_run"], 1);
+    assert_eq!(dashboard["report_version"], 1);
+
+    let jsonl = std::fs::read_to_string(sandbox.join("proposed-tickets.jsonl"))
+        .expect("proposed-tickets.jsonl written next to the report");
+    let row: serde_json::Value = jsonl
+        .lines()
+        .next()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .unwrap();
+    assert_eq!(
+        row["token"],
+        "evallerina:wai-hint-adherence-typo:tool_fault"
+    );
+    assert_eq!(row["decision"], "dry_run");
+
+    std::fs::remove_dir_all(&sandbox).ok();
+}
+
 // ── registry wiring ─────────────────────────────────────────────────────────
 
 /// Every live scenario must declare the output channel its checks

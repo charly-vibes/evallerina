@@ -180,11 +180,22 @@ fn run_report(path: &str, route: bool, file: bool) -> Result<ExitCode, String> {
         .map(|line| serde_json::from_str(line).map_err(|e| format!("malformed report row: {e}")))
         .collect::<Result<Vec<_>, String>>()?;
     let configured: Vec<String> = ordered_ids().into_iter().map(String::from).collect();
-    let dashboard = evallerina::report::aggregate_rows(
+    let mut dashboard = evallerina::report::aggregate_rows(
         &rows,
         &configured,
         &evallerina::report::scenario_channel,
     )?;
+    if route {
+        let mut runner = evallerina::routing::run_bd;
+        evallerina::report::run_routing_step(
+            &mut dashboard,
+            &rows,
+            &configured,
+            std::path::Path::new(path),
+            file,
+            &mut runner,
+        )?;
+    }
     println!(
         "{}",
         serde_json::to_string_pretty(&dashboard).expect("dashboard serializes")

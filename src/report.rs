@@ -30,6 +30,98 @@ pub fn validate_route_flags(route: bool, file: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// The scenario definition's recorded tool — the repo key for routing
+/// (routing.rs keys proposals on this, never the report row's `tool`
+/// field, which is hardcoded for live trials). Scenario names
+/// prefix-encode the eval target by convention (`wai-*`, `dont-*`);
+/// an unknown prefix is None → a loud error downstream (never a
+/// silent bucket, mirroring aggregate_rows).
+pub fn scenario_tool_of(name: &str) -> Option<String> {
+    if name.starts_with("wai-") {
+        Some("wai".to_owned())
+    } else if name.starts_with("dont-") {
+        Some("dont".to_owned())
+    } else {
+        None
+    }
+}
+
+/// Run the routing step against an aggregated dashboard: propose
+/// dry-run tickets from the same rows the dashboard aggregated from,
+/// optionally file them (Phase 2, `--file`), and attach the additive
+/// `routed` summary — decision counts only, no aggregate score — to
+/// the dashboard JSON.
+///
+/// Returns the proposals so the caller can serialize
+/// proposed-tickets.jsonl. Routing never affects the exit code unless
+/// it errors loudly (empty registry, unknown scenario, version
+/// mismatch): skipped proposals (unmapped tool, bd failure) are the
+/// record, not failures.
+pub fn attach_routing(
+    dashboard: &mut serde_json::Value,
+    rows: &[serde_json::Value],
+    configured_models: &[String],
+    repo_map: &BTreeMap<String, String>,
+    file_authorized: bool,
+    run_bd: &mut crate::routing::BdRunner,
+) -> Result<Vec<crate::routing::ProposalRow>, String> {
+    let mut proposals =
+        crate::routing::propose(rows, configured_models, &scenario_tool_of, repo_map)?;
+    crate::routing::file_proposals(&mut proposals, file_authorized, run_bd)?;
+
+    let (mut filed, mut existing, mut dry_run, mut skipped) = (0usize, 0, 0, 0);
+    for p in &proposals {
+        match p.decision.as_str() {
+            "filed" => filed += 1,
+            "existing" => existing += 1,
+            "dry_run" => dry_run += 1,
+            _ => skipped += 1,
+        }
+    }
+    dashboard["routed"] = json!({
+        "filed": filed,
+        "existing": existing,
+        "dry_run": dry_run,
+        "skipped": skipped,
+    });
+    Ok(proposals)
+}
+
+/// The full CLI routing step for `report --route`: load routing.toml
+/// (from the current directory — the repo root on rotation day),
+/// attach the routed summary to the dashboard, and write
+/// proposed-tickets.jsonl next to the report file. `file_authorized`
+/// comes from the explicit `--file` flag; the runner is injectable so
+/// tests can spy on bd calls.
+pub fn run_routing_step(
+    dashboard: &mut serde_json::Value,
+    rows: &[serde_json::Value],
+    configured_models: &[String],
+    report_path: &std::path::Path,
+    file_authorized: bool,
+    run_bd: &mut crate::routing::BdRunner,
+) -> Result<Vec<crate::routing::ProposalRow>, String> {
+    let content = std::fs::read_to_string("routing.toml")
+        .map_err(|e| format!("cannot read routing.toml: {e}"))?;
+    let repo_map = crate::routing::parse_routing_toml(&content)?;
+    let proposals = attach_routing(
+        dashboard,
+        rows,
+        configured_models,
+        &repo_map,
+        file_authorized,
+        run_bd,
+    )?;
+    let jsonl = crate::routing::to_jsonl(&proposals);
+    let out_path = report_path
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("proposed-tickets.jsonl");
+    std::fs::write(&out_path, jsonl)
+        .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
+    Ok(proposals)
+}
+
 /// Version of the dashboard shape. Additive evolution only within a
 /// version; breaking changes bump this.
 pub const DASHBOARD_VERSION: u32 = 1;
