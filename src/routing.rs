@@ -101,9 +101,7 @@ pub fn propose(
     repo_map: &BTreeMap<String, String>,
 ) -> Result<Vec<ProposalRow>, String> {
     if configured_models.is_empty() {
-        return Err(
-            "configured model registry is empty — no routing threshold exists".into(),
-        );
+        return Err("configured model registry is empty — no routing threshold exists".into());
     }
     let routing_threshold = configured_models.len().min(ROUTING_THRESHOLD);
 
@@ -139,8 +137,9 @@ pub fn propose(
         // The repo keys on the scenario definition's recorded tool,
         // not the row's tool field (hardcoded in live rows; the hhs
         // bug showed attribution drifts). Unknown scenario → loud.
-        let recorded_tool = scenario_tool_of(scenario)
-            .ok_or_else(|| format!("scenario '{scenario}' has no recorded tool — refusing to route"))?;
+        let recorded_tool = scenario_tool_of(scenario).ok_or_else(|| {
+            format!("scenario '{scenario}' has no recorded tool — refusing to route")
+        })?;
         let checks = row
             .get("checks")
             .and_then(serde_json::Value::as_array)
@@ -176,9 +175,7 @@ pub fn propose(
                     let entry = faults.entry(key).or_default();
                     entry.occurrences += 1;
                     if let Some(model) = model {
-                        entry
-                            .models
-                            .insert((model.to_owned(), row_tool.to_owned()));
+                        entry.models.insert((model.to_owned(), row_tool.to_owned()));
                     }
                 }
             }
@@ -192,10 +189,7 @@ pub fn propose(
             let repo = repo_map.get(&key.tool).cloned();
             let (decision, reason) = match repo {
                 Some(_) => ("dry_run".to_owned(), None),
-                None => (
-                    "skipped".to_owned(),
-                    Some("unmapped_tool".to_owned()),
-                ),
+                None => ("skipped".to_owned(), Some("unmapped_tool".to_owned())),
             };
             ProposalRow {
                 token: format!("evallerina:{}:{}", key.scenario, key.fault_class),
@@ -268,6 +262,17 @@ pub fn resolve_repo(repo: &str, evallerina_root: &std::path::Path) -> String {
         return repo.to_owned();
     }
     evallerina_root.join(repo).to_string_lossy().into_owned()
+}
+
+/// Serialize proposals to the proposed-tickets.jsonl artifact: one JSON
+/// object per line, machine-checkable, reviewable without reading code.
+pub fn to_jsonl(proposals: &[ProposalRow]) -> String {
+    let mut out = String::new();
+    for p in proposals {
+        out.push_str(&p.to_json().to_string());
+        out.push('\n');
+    }
+    out
 }
 
 /// Discover the evallerina repo root (worktree-safe) for relative

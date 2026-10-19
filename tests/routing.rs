@@ -46,9 +46,8 @@ fn threshold_tool_fault_becomes_dry_run_proposal() {
         .iter()
         .map(|m| trial_row("wai-hint-adherence-typo", "wai", m))
         .collect();
-    let proposals =
-        routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
-            .expect("routing succeeds");
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("routing succeeds");
     assert_eq!(proposals.len(), 1, "one fault key above threshold");
     let p = &proposals[0].to_json();
     assert_eq!(p["scenario"], "wai-hint-adherence-typo");
@@ -66,10 +65,12 @@ fn below_threshold_is_no_proposal() {
         .iter()
         .map(|m| trial_row("wai-hint-adherence-typo", "wai", m))
         .collect();
-    let proposals =
-        routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
-            .expect("routing succeeds");
-    assert!(proposals.is_empty(), "below threshold → recorded, no action");
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("routing succeeds");
+    assert!(
+        proposals.is_empty(),
+        "below threshold → recorded, no action"
+    );
 }
 
 #[test]
@@ -85,10 +86,12 @@ fn agent_faults_are_never_routed() {
             r
         })
         .collect();
-    let proposals =
-        routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
-            .expect("routing succeeds");
-    assert!(proposals.is_empty(), "agent faults must not produce proposals");
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("routing succeeds");
+    assert!(
+        proposals.is_empty(),
+        "agent faults must not produce proposals"
+    );
 }
 
 #[test]
@@ -164,4 +167,88 @@ fn absolute_repo_passes_through_for_worktrees() {
         routing::resolve_repo("/para/worktrees/wai", root),
         "/para/worktrees/wai"
     );
+}
+
+#[test]
+fn every_proposal_row_carries_the_full_schema() {
+    // Mixed bag: one mapped tool fault (dry_run), one unmapped
+    // (skipped/unmapped_tool) — every row must carry ALL schema fields
+    // with null where absent, and the JSONL artifact must be one
+    // machine-checkable JSON object per line.
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .flat_map(|m| {
+            vec![
+                trial_row("wai-hint-adherence-typo", "wai", m),
+                trial_row("wai-doc-drift-stale-agents-md", "wai", m),
+            ]
+        })
+        .collect();
+    let mut map = std::collections::BTreeMap::new();
+    map.insert("wai".to_owned(), "../wai".to_owned());
+    let two_scenarios = |s: &str| {
+        (s == "wai-hint-adherence-typo" || s == "wai-doc-drift-stale-agents-md")
+            .then(|| "wai".to_owned())
+    };
+    let proposals =
+        routing::propose(&rows, &three_models(), &two_scenarios, &map).expect("routing succeeds");
+    assert_eq!(proposals.len(), 2);
+    for p in &proposals {
+        let j = p.to_json();
+        for field in [
+            "tool",
+            "repo",
+            "scenario",
+            "fault_class",
+            "token",
+            "decision",
+            "reason",
+            "bd_issue_id",
+            "row_provenance",
+        ] {
+            assert!(j.get(field).is_some(), "schema field {field} missing");
+        }
+        assert_eq!(
+            j["bd_issue_id"],
+            serde_json::Value::Null,
+            "dry-run files nothing"
+        );
+        assert_eq!(
+            j["reason"],
+            serde_json::Value::Null,
+            "dry_run has no reason"
+        );
+        // row_provenance dedupes by model: 3 entries per proposal.
+        assert_eq!(j["row_provenance"].as_array().map(Vec::len), Some(3));
+        for prov in j["row_provenance"].as_array().unwrap() {
+            for f in ["scenario", "model", "tool"] {
+                assert!(prov.get(f).is_some(), "provenance field {f} missing");
+            }
+        }
+    }
+}
+
+#[test]
+fn unknown_scenario_is_a_loud_error() {
+    let rows = vec![trial_row("mystery-scenario", "wai", "m/a")];
+    let err = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect_err("unknown scenario must be loud, never a silent bucket");
+    assert!(err.contains("mystery-scenario"));
+}
+
+#[test]
+fn jsonl_writer_emits_one_object_per_line() {
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| trial_row("wai-hint-adherence-typo", "wai", m))
+        .collect();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("routing succeeds");
+    let jsonl = routing::to_jsonl(&proposals);
+    let lines: Vec<&str> = jsonl.lines().collect();
+    assert_eq!(lines.len(), proposals.len(), "one object per line");
+    for line in &lines {
+        let v: serde_json::Value = serde_json::from_str(line).expect("each line is a JSON object");
+        assert!(v.get("token").is_some());
+    }
 }
