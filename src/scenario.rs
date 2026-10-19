@@ -62,6 +62,13 @@ pub fn live_scenarios() -> Vec<Scenario> {
         dont_lifecycle_scenario(),
         wai_doc_drift_scenario(),
         dont_doc_drift_scenario(),
+        // Recorded archetype scenarios join the battery (evallerina-bhh):
+        // rotation cadence proved stable through the epic, so tier-2 now
+        // covers vampiro seam composition and stale-AGENTS.md drift. The
+        // 4 stub archetypes (scenarios/archetypes/TODO.md) stay out until
+        // their recordings land.
+        polyglot_seam_scenario(),
+        drifted_ecosystem_scenario(),
     ]
 }
 

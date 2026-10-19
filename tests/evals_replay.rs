@@ -10,8 +10,8 @@ use evallerina::recorded::RecordedTrajectory;
 use evallerina::scenario::{
     ARCHETYPE_DIR, DOC_DRIFT_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD, STALE_WAI_AGENTS_MD,
     dont_doc_drift_scenario, dont_lifecycle_scenario, drifted_ecosystem_scenario,
-    polyglot_seam_scenario, smoke_scenario, wai_corrupt_config_scenario, wai_doc_drift_scenario,
-    wai_typo_scenario,
+    live_scenario_by_name, live_scenarios, polyglot_seam_scenario, smoke_scenario,
+    wai_corrupt_config_scenario, wai_doc_drift_scenario, wai_typo_scenario,
 };
 use genesis::evals::{AgentStep, Scenario, agent_executed_all, agent_followed_hint};
 
@@ -513,4 +513,64 @@ fn drifted_ecosystem_fixture_bait_matches_constant() {
         STALE_WAI_AGENTS_MD,
         "fixture AGENTS.md must equal STALE_WAI_AGENTS_MD"
     );
+}
+
+// ---------------------------------------------------------------------
+// evallerina-bhh: archetype scenarios join the tier-2 live battery
+// ---------------------------------------------------------------------
+
+/// Battery shape (evallerina-bhh): the tier-2 rotation battery is the
+/// registry in `live_scenarios()` — 6 wai/dont scenarios plus the two
+/// recorded archetype scenarios. The rotation iterates this registry, so
+/// both archetype names must be registered and resolvable via
+/// `live_scenario_by_name` (the CLI `live <scenario>` filter).
+#[test]
+fn battery_registers_both_archetype_scenarios() {
+    let names: Vec<String> = live_scenarios().iter().map(|s| s.name.clone()).collect();
+    assert_eq!(names.len(), 8, "battery shape: 6 live + 2 archetype, got {names:?}");
+    assert!(
+        names.iter().any(|n| n == "vampiro-polyglot-seam"),
+        "polyglot seam archetype missing from the battery: {names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n == "wai-drifted-ecosystem"),
+        "drifted ecosystem archetype missing from the battery: {names:?}"
+    );
+
+    // CLI resolution: `live <scenario>` must resolve both archetypes.
+    assert_eq!(
+        live_scenario_by_name("vampiro-polyglot-seam")
+            .expect("polyglot seam resolves")
+            .name,
+        "vampiro-polyglot-seam"
+    );
+    assert_eq!(
+        live_scenario_by_name("wai-drifted-ecosystem")
+            .expect("drifted ecosystem resolves")
+            .name,
+        "wai-drifted-ecosystem"
+    );
+}
+
+/// Anti-goal guard (evallerina-bhh): the 4 remaining archetype fixtures
+/// (scenarios/archetypes/TODO.md) are stubs — recorded JSON does not
+/// exist yet — so they must stay OUT of the battery. TODO.md is their
+/// home until a recording lands and a separate ticket registers them.
+#[test]
+fn battery_excludes_stub_archetype_fixtures() {
+    let stub_fixture_keys = [
+        "legacy-monolith",
+        "ai-native-greenfield",
+        "high-compliance",
+        "devops-headless",
+    ];
+    for scenario in live_scenarios() {
+        for stub in stub_fixture_keys {
+            assert!(
+                !scenario.name.contains(stub),
+                "stub archetype fixture '{stub}' must not be registered as '{}' — record it live first (scenarios/archetypes/TODO.md)",
+                scenario.name
+            );
+        }
+    }
 }
