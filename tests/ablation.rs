@@ -221,6 +221,41 @@ fn real_generation_llms_txt_is_genesis_output_for_the_tool_set() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+// ── hermetic fallback (opt-out / no tool binaries) ─────────────────────────
+
+/// Without the real-generation opt-in (no tool binaries provisioned,
+/// or the caller simply doesn't opt in) the harness stays hermetic:
+/// the full arm provisions exactly today's static contents — behavior
+/// byte-for-byte unchanged.
+#[test]
+fn static_source_provisions_hermetic_contents_unchanged() {
+    let static_md = test_artifacts().managed_agents_md;
+    let scenario =
+        Scenario::new("hermetic-probe", "create the file").check("agents-md-is-static", move |r| {
+            let md = std::fs::read_to_string(r.fixture_root.join("AGENTS.md")).unwrap_or_default();
+            if md == static_md {
+                CheckOutcome::pass()
+            } else {
+                CheckOutcome::tool_fault("AGENTS.md is not the hermetic static content")
+            }
+        });
+    let report = run_ablation(
+        &scenario,
+        &["m1".to_owned()],
+        3,
+        AixSource::Static(&test_artifacts()),
+        AblationFactories {
+            full: &mut green_factory(),
+            ablated: &mut green_factory(),
+        },
+        &Bounds::default(),
+        &always_open,
+    )
+    .expect("ablation runs");
+    assert_eq!(report.full.passed, 3, "full arm sees the static contents");
+    assert_eq!(report.ablated.failed, 3, "ablated arm sees none of them");
+}
+
 // ── the A/B shape ───────────────────────────────────────────────────────────
 
 /// The Must gate: an A/B report for one scenario with the delta
