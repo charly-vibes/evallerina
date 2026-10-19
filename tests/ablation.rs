@@ -12,6 +12,9 @@
 //! cells, sub-3 samples) would manufacture value the evals never
 //! measured.
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use genesis::evals::{CheckOutcome, Scenario};
 use genesis::managed_block::BlockDef;
 use serde_json::json;
@@ -254,6 +257,107 @@ fn static_source_provisions_hermetic_contents_unchanged() {
     .expect("ablation runs");
     assert_eq!(report.full.passed, 3, "full arm sees the static contents");
     assert_eq!(report.ablated.failed, 3, "ablated arm sees none of them");
+}
+
+// ── real generation failures are loud (evallerina-0j8 step 4) ───────────────
+
+/// A fake tool binary: a shell script with the given body, executable.
+fn fake_wai(tag: &str, body: &str) -> std::path::PathBuf {
+    let dir = unique_dir(tag);
+    let script = dir.join("wai");
+    std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).expect("write fake wai");
+    #[allow(clippy::permissions_set_readonly_false)] // executable bit
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("chmod fake wai");
+    script
+}
+
+/// A `wai` binary that fails (nonzero exit) makes real generation a
+/// loud error — and `run_ablation` aborts with that error rather than
+/// silently provisioning placeholder contents.
+#[test]
+fn tool_generation_failure_is_a_loud_error() {
+    let failing = fake_wai("failing-wai", "echo boom >&2\nexit 3");
+    let dir = unique_dir("failing-wai-fixture");
+    let err = AixArtifacts::for_fixture(
+        &dir,
+        &ToolBinaries {
+            wai: failing.clone(),
+        },
+    )
+    .expect_err("generation failure is loud");
+    assert!(
+        err.contains("wai init"),
+        "error names the failed tool: {err}"
+    );
+    // run_ablation propagates the loud error: no silent placeholder
+    // fallback, no ablation with fake artifacts.
+    let err = run_ablation(
+        &artifacts_scenario(),
+        &["m1".to_owned()],
+        3,
+        AixSource::Real(ToolBinaries { wai: failing }),
+        AblationFactories {
+            full: &mut green_factory(),
+            ablated: &mut green_factory(),
+        },
+        &Bounds::default(),
+        &always_open,
+    )
+    .expect_err("ablation aborts on generation failure");
+    assert!(
+        err.contains("wai init"),
+        "error names the failed tool: {err}"
+    );
+}
+
+/// A `wai` binary that exits 0 but produces nothing (no AGENTS.md) is
+/// also a loud error — the produced files are asserted, not assumed.
+#[test]
+fn missing_produced_file_is_a_loud_error() {
+    let silent = fake_wai("silent-wai", "exit 0");
+    let dir = unique_dir("silent-wai-fixture");
+    let err = AixArtifacts::for_fixture(&dir, &ToolBinaries { wai: silent })
+        .expect_err("missing artifact is loud");
+    assert!(
+        err.contains("AGENTS.md"),
+        "error names the missing produced file: {err}"
+    );
+}
+
+/// The corrupt-config concern: `.genesis/tools.toml` can be
+/// scenario-owned (the fault injection). Real mode refuses the same
+/// collision the static mode refuses — before any generation runs, so
+/// a tool never writes into scenario material.
+#[test]
+fn real_mode_refuses_scenario_owned_paths_before_generation() {
+    let failing = fake_wai("collision-wai", "exit 0");
+    let scenario = Scenario::new("colliding-real", "create the file")
+        .fixture_file(".genesis/tools.toml", "scenario-owned corrupt config")
+        .check("touch-landed", |r| {
+            if r.fixture_root.join("touched.txt").exists() {
+                CheckOutcome::pass()
+            } else {
+                CheckOutcome::tool_fault("touched.txt missing")
+            }
+        });
+    let err = run_ablation(
+        &scenario,
+        &["m1".to_owned()],
+        3,
+        AixSource::Real(ToolBinaries { wai: failing }),
+        AblationFactories {
+            full: &mut green_factory(),
+            ablated: &mut green_factory(),
+        },
+        &Bounds::default(),
+        &always_open,
+    )
+    .expect_err("collision refused in real mode too");
+    assert!(
+        err.contains("tools.toml"),
+        "error names the colliding path: {err}"
+    );
 }
 
 // ── the A/B shape ───────────────────────────────────────────────────────────
