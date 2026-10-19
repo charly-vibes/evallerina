@@ -13,10 +13,28 @@
 //! measured.
 
 use genesis::evals::{CheckOutcome, Scenario};
+use genesis::managed_block::BlockDef;
 use serde_json::json;
 
-use evallerina::ablation::{AblationFactories, AixArtifacts, run_ablation};
+use evallerina::ablation::{
+    AblationFactories, AixArtifacts, AixSource, ToolBinaries, run_ablation,
+};
 use evallerina::live::{Arm, Bounds, RotationEvent, Transport, TransportError, TrialStatus};
+
+/// A fresh unique temp dir for real-tool generation fixtures. Deleted
+/// after use by the tests that create it.
+fn unique_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "evallerina-ablation-{tag}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos(),
+    ));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    dir
+}
 
 /// The dulce-family AIX artifact set (test content; production wires
 /// the real generated artifacts).
@@ -123,6 +141,50 @@ fn budget_closes_after(n: u32) -> impl Fn() -> bool {
     }
 }
 
+// ── real artifact generation (opt-in; evallerina-0j8) ───────────────────────
+
+/// Real generation: `wai init --json` inside the generation fixture
+/// yields the real managed AGENTS.md — wai's provenance footer and the
+/// managed block markers from genesis-vibes, never placeholder text.
+/// Skips hermetically when no `wai` binary is available (CI without
+/// tool binaries); runs for real wherever the tool is provisioned.
+#[test]
+fn real_generation_writes_managed_agents_md_with_wai_provenance() {
+    let Some(wai) = ToolBinaries::discover_wai() else {
+        return; // no tool binaries provisioned → hermetic skip
+    };
+    let dir = unique_dir("real-agents-md");
+    let generated =
+        AixArtifacts::for_fixture(&dir, &ToolBinaries { wai }).expect("wai init generates");
+    let block = BlockDef::new("WAI");
+    assert!(
+        generated.managed_agents_md.contains(&block.start_marker),
+        "real AGENTS.md carries the managed block start marker"
+    );
+    assert!(
+        generated.managed_agents_md.contains(&block.end_marker),
+        "real AGENTS.md carries the managed block end marker"
+    );
+    assert!(
+        generated
+            .managed_agents_md
+            .contains("provenance: generator=wai"),
+        "real AGENTS.md carries wai's provenance footer"
+    );
+    assert!(
+        !generated.managed_agents_md.contains("managed guidance"),
+        "real AGENTS.md is never the placeholder text"
+    );
+    // wai init also registers the tool manifest via genesis discovery:
+    // the produced `.genesis/tools.toml` is the real registered one.
+    assert!(
+        generated.tools_toml.contains("[tools.wai]"),
+        "real tools.toml registers wai: {}",
+        generated.tools_toml
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 // ── the A/B shape ───────────────────────────────────────────────────────────
 
 /// The Must gate: an A/B report for one scenario with the delta
@@ -135,7 +197,7 @@ fn delta_computed_over_three_runs_per_arm() {
         &artifacts_scenario(),
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut green_factory(),
@@ -168,7 +230,7 @@ fn reps_below_three_is_an_error() {
         &artifacts_scenario(),
         &["m1".to_owned()],
         2,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut green_factory(),
@@ -189,7 +251,7 @@ fn delta_undefined_when_an_arm_cannot_run() {
         &artifacts_scenario(),
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut rate_limited_factory(),
@@ -215,7 +277,7 @@ fn absent_cells_surfaced_and_excluded_from_delta_denominator() {
         &artifacts_scenario(),
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut green_factory(),
@@ -242,7 +304,7 @@ fn rows_carry_arm_and_report_version_stays_1() {
         &artifacts_scenario(),
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut green_factory(),
@@ -289,7 +351,7 @@ fn artifact_path_collision_is_a_loud_error() {
         &scenario,
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut green_factory(),
@@ -315,7 +377,7 @@ fn ablation_report_serializes_with_per_arm_detail() {
         &artifacts_scenario(),
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut green_factory(),
             ablated: &mut green_factory(),
@@ -364,7 +426,7 @@ fn mixed_results_produce_fractional_delta() {
         &action_scenario,
         &["m1".to_owned()],
         3,
-        &test_artifacts(),
+        AixSource::Static(&test_artifacts()),
         AblationFactories {
             full: &mut full_factory,
             ablated: &mut green_factory(),
