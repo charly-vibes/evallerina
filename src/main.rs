@@ -50,6 +50,40 @@ enum Command {
         #[arg(long, default_value_t = DEFAULT_BUDGET_MINS)]
         budget_mins: u64,
     },
+    /// A/B ablation over one scenario (evals.md Step 5): the full arm
+    /// (AIX artifacts provisioned) vs the ablated arm (raw binaries),
+    /// ≥3 runs per arm over the configured model registry. Writes the
+    /// per-arm rotation rows as ArmReport JSONL to --out and prints the
+    /// per-arm summary + delta as JSON on stdout.
+    Ablate {
+        /// Scenario name (a live battery scenario; unknown names are a
+        /// loud error).
+        scenario: String,
+        /// Repetitions per arm (the evals.md Step 5 delta floor is 3).
+        #[arg(long, default_value_t = DEFAULT_REPETITIONS)]
+        reps: u32,
+        /// Run only this model id (default: the whole registry, in order).
+        #[arg(long, default_value = None)]
+        model: Option<String>,
+        /// Dry-run: every cell is recorded absent — no model calls, no
+        /// network; exercises the full report path hermetically.
+        #[arg(long)]
+        dry_run: bool,
+        /// Real artifact generation (opt-in; evallerina-0j8): invoke the
+        /// provisioned `wai` binary and harvest what it produces for the
+        /// full arm, instead of the static hermetic contents. A tool
+        /// failure is a loud error, never a placeholder fallback.
+        #[arg(long)]
+        real_artifacts: bool,
+        /// Per-run wall-clock budget, minutes; cells not started before
+        /// it expires are recorded absent, never failed.
+        #[arg(long, default_value_t = DEFAULT_BUDGET_MINS)]
+        budget_mins: u64,
+        /// Path the ArmReport JSONL rows are written to (full arm rows
+        /// first, then ablated, in run order).
+        #[arg(long)]
+        out: String,
+    },
     /// Aggregate report rows (one JSON value per line in a JSONL file —
     /// tier-2 rotation events or tier-1 rows) into the per-channel
     /// fault dashboard. Prints the dashboard JSON to stdout; exits
@@ -104,6 +138,29 @@ fn main() -> std::process::ExitCode {
             }
         },
         Command::Report { path, route, file } => match run_report(&path, route, file) {
+            Ok(code) => code,
+            Err(msg) => {
+                eprintln!("{msg}");
+                ExitCode::FAILURE
+            }
+        },
+        Command::Ablate {
+            scenario,
+            reps,
+            model,
+            dry_run,
+            real_artifacts,
+            budget_mins,
+            out,
+        } => match run_ablate(
+            &scenario,
+            reps,
+            model,
+            dry_run,
+            real_artifacts,
+            budget_mins,
+            &out,
+        ) {
             Ok(code) => code,
             Err(msg) => {
                 eprintln!("{msg}");
@@ -201,4 +258,20 @@ fn run_report(path: &str, route: bool, file: bool) -> Result<ExitCode, String> {
         serde_json::to_string_pretty(&dashboard).expect("dashboard serializes")
     );
     Ok(ExitCode::SUCCESS)
+}
+
+/// A/B ablation CLI handler: resolve the scenario and model list, run
+/// both arms via [`evallerina::ablation::run_ablation`], write the
+/// ArmReport JSONL rows, print the summary. Wired in evallerina-wdx.
+#[allow(unused_variables)]
+fn run_ablate(
+    scenario: &str,
+    reps: u32,
+    model: Option<String>,
+    dry_run: bool,
+    real_artifacts: bool,
+    budget_mins: u64,
+    out: &str,
+) -> Result<ExitCode, String> {
+    Err("ablate is not wired to run_ablation yet".to_owned())
 }
