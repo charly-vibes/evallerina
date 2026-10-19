@@ -1,0 +1,7 @@
+ticket: evallerina-wdx
+branch: main
+brief_path: .wai/projects/evallerina/briefs/evallerina-wdx.md
+steps: []
+steps:
+  - claim:7f2f65b2fa257edafb906397db68ffe96bd51fb8
+  - brief:7f2f65b2fa257edafb906397db68ffe96bd51fb8
