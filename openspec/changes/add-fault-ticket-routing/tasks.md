@@ -34,12 +34,12 @@
 
 ## 3. CLI + report wiring
 
-- [ ] 3.1 `evallerina report --route [--file]` flag plumbing; default
+- [x] 3.1 `evallerina report --route [--file]` flag plumbing; default
   dry-run; `routed` summary field added to report (additive, report_version
   stays 1; update `tests/report_aggregation.rs` expectations)
-- [ ] 3.2 Threshold filter matches report.rs semantics: fault key observed
+- [x] 3.2 Threshold filter matches report.rs semantics: fault key observed
   in trial rows from ≥ min(3, |configured registry|) distinct models
-- [ ] 3.2 Tier-2 GHA workflow: upload `proposed-tickets.jsonl` artifact on
+- [x] 3.2 Tier-2 GHA workflow: upload `proposed-tickets.jsonl` artifact on
   scheduled rotation; CI never passes `--file`
 
 ## 4. Validation

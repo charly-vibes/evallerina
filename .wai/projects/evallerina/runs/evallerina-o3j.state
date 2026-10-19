@@ -6,3 +6,5 @@ steps:
   - gates:73037525a2e9a08d6718febd7dba89f709df35b2
   - brief:73037525a2e9a08d6718febd7dba89f709df35b2
   - spawn:7679eebf72554b2d5a176fe7776fb6d4060c09f8
+  - verify:adda62949d6550b64bae8e26d9a51bf18fb8c906
+  - ship:adda62949d6550b64bae8e26d9a51bf18fb8c906
