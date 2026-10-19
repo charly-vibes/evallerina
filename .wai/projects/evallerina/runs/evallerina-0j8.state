@@ -3,3 +3,6 @@ steps:
   - gates:ab06f60fc06cac56a96433e67e2c4d3bfb8e7851
   - brief:ab06f60fc06cac56a96433e67e2c4d3bfb8e7851
   - brief2:ab06f60fc06cac56a96433e67e2c4d3bfb8e7851
+  - verify:395948dd545592c2bf9920d76519daa4fcc629f1
+  - ship:395948dd545592c2bf9920d76519daa4fcc629f1
+  - stop:395948dd545592c2bf9920d76519daa4fcc629f1 (run complete)
