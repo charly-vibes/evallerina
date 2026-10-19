@@ -1,5 +1,7 @@
 ticket: evallerina-o3j
 branch: main
-brief_path:
+brief_path: .wai/projects/evallerina/briefs/evallerina-o3j.md
 steps:
   - claim:0524ab2a1c368a82cff5ecd08d9d526b9a93368b
+  - gates:73037525a2e9a08d6718febd7dba89f709df35b2
+  - brief:73037525a2e9a08d6718febd7dba89f709df35b2
