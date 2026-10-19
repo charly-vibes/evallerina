@@ -527,7 +527,11 @@ fn drifted_ecosystem_fixture_bait_matches_constant() {
 #[test]
 fn battery_registers_both_archetype_scenarios() {
     let names: Vec<String> = live_scenarios().iter().map(|s| s.name.clone()).collect();
-    assert_eq!(names.len(), 8, "battery shape: 6 live + 2 archetype, got {names:?}");
+    assert_eq!(
+        names.len(),
+        8,
+        "battery shape: 6 live + 2 archetype, got {names:?}"
+    );
     assert!(
         names.iter().any(|n| n == "vampiro-polyglot-seam"),
         "polyglot seam archetype missing from the battery: {names:?}"

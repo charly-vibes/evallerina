@@ -141,6 +141,12 @@ pub fn scenario_channel(name: &str) -> Option<&'static str> {
         | "dont-hint-adherence-lifecycle" => Some("envelope"),
         "wai-hint-adherence-typo" => Some("suggestions"),
         "wai-doc-drift-stale-agents-md" | "dont-doc-drift-stale-lifecycle" => Some("artifact"),
+        // Archetype family (evallerina-bhh): vampiro-polyglot-seam asserts
+        // on vampiro's gate/guidance JSON envelopes; wai-drifted-ecosystem
+        // probes the stale-AGENTS.md artifact via doc_drift_blindness,
+        // mapping to `artifact` like its doc-drift siblings.
+        "vampiro-polyglot-seam" => Some("envelope"),
+        "wai-drifted-ecosystem" => Some("artifact"),
         _ => None,
     }
 }

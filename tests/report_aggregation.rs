@@ -13,7 +13,7 @@
 use serde_json::json;
 
 use evallerina::registry::REGISTRY;
-use evallerina::report::{DASHBOARD_VERSION, aggregate_rows};
+use evallerina::report::{DASHBOARD_VERSION, aggregate_rows, scenario_channel};
 use evallerina::scenario::live_scenarios;
 
 /// Test channel map: hermetic — scenario name → the output channel the
@@ -680,4 +680,25 @@ fn every_live_scenario_declares_a_channel() {
             scenario.name
         );
     }
+}
+
+/// The archetype scenarios join the battery (evallerina-bhh) and must
+/// resolve to the channel their checks probe — the archetype family
+/// mappings in `scenario_channel`. vampiro-polyglot-seam asserts on
+/// vampiro's gate/guidance JSON envelopes; wai-drifted-ecosystem is the
+/// archetype cousin of the doc-drift family (same stale-AGENTS.md
+/// artifact probe via doc_drift_blindness), so it maps to `artifact`
+/// like its siblings.
+#[test]
+fn archetype_scenarios_declare_channels() {
+    assert_eq!(
+        scenario_channel("vampiro-polyglot-seam"),
+        Some("envelope"),
+        "polyglot seam probes vampiro's gate/guidance envelopes"
+    );
+    assert_eq!(
+        scenario_channel("wai-drifted-ecosystem"),
+        Some("artifact"),
+        "drifted ecosystem probes the stale-docs artifact like the doc-drift family"
+    );
 }
