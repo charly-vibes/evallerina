@@ -21,14 +21,22 @@ respective tools — routing should not depend on manual triage.
   the source of truth for *tool* identity, routing.toml only maps to repos.
 - Deduplication before filing: a stable fingerprint token
   (`evallerina:<scenario>:<fault-class>`) is embedded in every proposed
-  ticket; before filing, the target repo is searched for an open issue with
-  the same token. Existing match → skip, record `existing`.
+  ticket; before filing, the target repo is searched for an **open** issue
+  with the same token (`bd search --status open` — closed issues are
+  deliberately no match so a regressed fault is re-filed). Existing match →
+  skip, record `existing`.
 - `evallerina report --route` flag: dry-run by default (writes
   `proposed-tickets.jsonl` next to the report); actual filing requires
   `--route --file`. Scheduled GHA tier-2 runs stay dry-run and upload the
   proposals as workflow artifacts — filing is a locally authorized action.
 - Report gains an additive `routed` summary field (count per decision:
-  `filed` / `existing` / `dry_run` / `skipped`). report_version 1 unchanged.
+  `filed` / `existing` / `dry_run` / `skipped`), where `skipped` covers
+  both unmapped tools and `bd` failures in the target repo (reason
+  recorded, never fatal). report_version 1 unchanged.
+- Proposals key the target repository on the scenario's recorded `tool`
+  field, not the report row's tool value (currently hardcoded in live rows
+  and prone to attribution drift); a machine-checkable
+  `proposed-tickets.jsonl` schema makes the CI artifact reviewable.
 
 ## Impact
 
