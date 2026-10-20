@@ -155,6 +155,44 @@ fn trial_row(scenario: &str, row_tool: &str, model: &str) -> serde_json::Value {
     })
 }
 
+// ── doc-coverage fault intake (evallerina-e4x) ─────────────────────────────
+
+/// A bridged doc-audit report row (src/doc_audit.rs report_row shape
+/// plus the routing intake attribution): one failing check per audit
+/// row, carrying the check-code; `model` attributes the static audit
+/// finding to one configured battery model.
+fn doc_audit_row(tool: &str, model: &str, code: &str) -> serde_json::Value {
+    json!({
+        "kind": "doc_audit",
+        "report_version": 1,
+        "scenario": "doc-audit",
+        "tool": tool,
+        "model": model,
+        "status": "failed",
+        "checks": [{"name": "doc:sample-feature", "passed": false, "code": code}]
+    })
+}
+
+#[test]
+fn undocumented_feature_audit_row_crosses_threshold_to_dry_run_proposal() {
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| doc_audit_row("wai", m, "ERR_FEATURE_UNDOCUMENTED"))
+        .collect();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("doc-audit rows route like any other fault row");
+    assert_eq!(proposals.len(), 1, "one fault key above threshold");
+    let p = &proposals[0].to_json();
+    assert_eq!(p["scenario"], "doc-audit");
+    assert_eq!(p["fault_class"], "ERR_FEATURE_UNDOCUMENTED");
+    assert_eq!(p["token"], "evallerina:doc-audit:ERR_FEATURE_UNDOCUMENTED");
+    assert_eq!(p["tool"], "wai", "repo keyed on the audited tool");
+    assert_eq!(p["repo"], "../wai");
+    assert_eq!(p["decision"], "dry_run");
+    assert_eq!(p["reason"], serde_json::Value::Null);
+    assert_eq!(p["bd_issue_id"], serde_json::Value::Null);
+}
+
 fn three_models() -> Vec<String> {
     vec!["m/a".into(), "m/b".into(), "m/c".into()]
 }

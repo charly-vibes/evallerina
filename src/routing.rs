@@ -142,12 +142,6 @@ pub fn propose(
                 "report row carries report_version {report_version}; routing aggregates version 1 only"
             ));
         }
-        // The repo keys on the scenario definition's recorded tool,
-        // not the row's tool field (hardcoded in live rows; the hhs
-        // bug showed attribution drifts). Unknown scenario → loud.
-        let recorded_tool = scenario_tool_of(scenario).ok_or_else(|| {
-            format!("scenario '{scenario}' has no recorded tool — refusing to route")
-        })?;
         let checks = row
             .get("checks")
             .and_then(serde_json::Value::as_array)
@@ -170,11 +164,39 @@ pub fn propose(
                 continue;
             }
             match check.get("code").and_then(serde_json::Value::as_str) {
+                // Doc-coverage faults (evallerina-fok, routing intake
+                // per add-ecosystem-doc-evals): the two audit codes
+                // route like any other fault row. The repo keys on the
+                // row's `tool` field — doc-audit rows carry the audited
+                // tool authoritatively (there is no scenario-definition
+                // recorded tool for the static audit) — and the fault
+                // class is the check code itself.
+                Some(code) if code == crate::doc_audit::ERR_FEATURE_UNDOCUMENTED => {
+                    let key = FaultKey {
+                        scenario: scenario.to_owned(),
+                        fault_class: code.to_owned(),
+                        tool: row_tool.to_owned(),
+                    };
+                    let entry = faults.entry(key).or_default();
+                    entry.occurrences += 1;
+                    if let Some(model) = model {
+                        entry.models.insert((model.to_owned(), row_tool.to_owned()));
+                    }
+                }
                 // Agent faults are never routed (fault taxonomy: they
                 // inform AIX-channel work in genesis — a human decision).
                 Some(code) if code.starts_with("ERR_") => continue,
                 // Tool fault: no code by contract (report.rs FaultKey::Tool).
+                // The repo keys on the scenario definition's recorded
+                // tool, not the row's tool field (hardcoded in live
+                // rows; the hhs bug showed attribution drifts). Unknown
+                // scenario → loud. Resolved lazily: doc-audit rows
+                // never reach this arm, so the static audit needs no
+                // scenario-registry entry.
                 _ => {
+                    let recorded_tool = scenario_tool_of(scenario).ok_or_else(|| {
+                        format!("scenario '{scenario}' has no recorded tool — refusing to route")
+                    })?;
                     let key = FaultKey {
                         scenario: scenario.to_owned(),
                         fault_class: "tool_fault".to_owned(),
