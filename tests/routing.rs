@@ -241,6 +241,32 @@ fn upstream_tool_audit_rows_are_skipped_never_filing_candidates() {
     assert!(spy.create_calls().is_empty(), "upstream tools are NEVER filed");
 }
 
+#[test]
+fn same_fingerprint_token_twice_collapses_to_one_proposal() {
+    // Fingerprint dedup is not bypassable: duplicate (scenario,
+    // fault-class, tool) rows — same token — collapse into ONE
+    // proposal, with occurrences riding along as the record.
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .flat_map(|m| {
+            vec![
+                doc_audit_row("wai", m, "ERR_FEATURE_UNDOCUMENTED"),
+                doc_audit_row("wai", m, "ERR_FEATURE_UNDOCUMENTED"),
+            ]
+        })
+        .collect();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("duplicate tokens collapse");
+    assert_eq!(proposals.len(), 1, "same token twice → one proposal");
+    let p = &proposals[0].to_json();
+    assert_eq!(p["token"], "evallerina:doc-audit:ERR_FEATURE_UNDOCUMENTED");
+    assert_eq!(
+        p["row_provenance"].as_array().map(Vec::len),
+        Some(3),
+        "provenance still dedupes by model"
+    );
+}
+
 fn three_models() -> Vec<String> {
     vec!["m/a".into(), "m/b".into(), "m/c".into()]
 }
