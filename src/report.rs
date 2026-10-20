@@ -147,6 +147,10 @@ pub fn scenario_channel(name: &str) -> Option<&'static str> {
         // mapping to `artifact` like its doc-drift siblings.
         "vampiro-polyglot-seam" => Some("envelope"),
         "wai-drifted-ecosystem" => Some("artifact"),
+        // Tier-0 doc-coverage audit rows (evallerina-fok, additive:
+        // report_version stays 1) probe the `docs` channel — feature
+        // documentation is the output channel the audit checks.
+        "doc-audit" => Some("docs"),
         _ => None,
     }
 }

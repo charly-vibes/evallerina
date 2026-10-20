@@ -107,6 +107,15 @@ enum Command {
         #[arg(long)]
         file: bool,
     },
+    /// Tier-0 doc-coverage audit (evallerina-fok): harvest each
+    /// configured tool's CLI surface from `--help`, scan its repo's doc
+    /// surfaces (README, docs/**, llms.txt, AGENTS.md managed blocks),
+    /// and emit per-token audit rows (ERR_FEATURE_UNDOCUMENTED /
+    /// ERR_DOC_NOT_FINDABLE) plus provenance for every non-extracted
+    /// source — never a silent skip. Prints the audit as JSON. Findings
+    /// are the record, not failures: exit nonzero only on loud errors
+    /// (missing/malformed config, unreadable surface).
+    DocAudit,
     /// Tier-0 routing-map parity gate (evallerina-0sy): diff
     /// routing.toml against dulce-de-leche's MANAGED-TOOLS block
     /// (../dulce-de-leche/README.md). Prints the parity report as JSON
@@ -163,6 +172,13 @@ fn main() -> std::process::ExitCode {
             Ok(code) => code,
             Err(msg) => {
                 eprintln!("{msg}");
+                ExitCode::FAILURE
+            }
+        },
+        Command::DocAudit => match run_doc_audit() {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("doc-audit: {e}");
                 ExitCode::FAILURE
             }
         },
@@ -277,6 +293,80 @@ fn run_routing_parity() -> Result<ExitCode, String> {
     } else {
         Ok(ExitCode::SUCCESS)
     }
+}
+
+/// Tier-0 doc-coverage audit CLI handler (evallerina-fok): load the
+/// checked-in doc_audit.toml from the repo root, run the surface step
+/// per tool (binary probe, or `skip`/`binary_absent` provenance —
+/// never a silent skip), scan each tool's local repo surfaces into a
+/// doc inventory, and diff the two into per-token audit rows that also
+/// flow into the report contract as report_version 1 rows. Findings
+/// are the record, not gate failures (the dashboard is the record);
+/// nonzero exit is reserved for loud errors: missing/malformed config,
+/// unreadable surfaces.
+fn run_doc_audit() -> Result<ExitCode, String> {
+    let root = evallerina::routing::discover_root()?;
+    let root_path = std::path::PathBuf::from(&root);
+    let config_path = root_path.join("doc_audit.toml");
+    let config_src = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("cannot read {}: {e}", config_path.display()))?;
+    let configs = evallerina::doc_audit::parse_config(&config_src)?;
+
+    let mut provenance = Vec::new();
+    let mut tools = serde_json::Map::new();
+    let mut report_rows = Vec::new();
+    let mut audit_rows_all = Vec::new();
+    for config in &configs {
+        let prov = evallerina::doc_audit::audit_tool_surface(config)?;
+        let mut tool_json = serde_json::json!({
+            "surface_status": prov.status,
+            "surface_tokens": prov.tokens.len(),
+            "audit_rows": 0,
+        });
+        if !prov.tokens.is_empty() {
+            // Only tools with a harvested surface can produce audit
+            // rows; the repo must be a local checkout to scan.
+            let repo = evallerina::routing::resolve_repo(&config.repo, &root_path);
+            let repo_path = std::path::PathBuf::from(&repo);
+            if repo_path.is_dir() {
+                let inv = evallerina::doc_audit::scan_inventory(&repo_path)?;
+                let rows = evallerina::doc_audit::audit(&prov.tokens, &inv);
+                tool_json["surfaces"] = serde_json::json!(inv.surfaces.len());
+                tool_json["audit_rows"] = serde_json::json!(rows.len());
+                audit_rows_all.extend(rows.iter().map(
+                    |r| serde_json::json!({"tool": config.tool, "token": r.token, "code": r.code}),
+                ));
+                if !rows.is_empty() {
+                    report_rows.push(evallerina::doc_audit::report_row(&config.tool, &rows));
+                }
+            } else {
+                provenance.push(serde_json::json!({
+                    "tool": config.tool,
+                    "status": "repo_absent",
+                    "detail": format!("repo checkout '{repo}' not found — inventory not scanned"),
+                }));
+                tool_json["surfaces"] = serde_json::json!(0);
+            }
+        }
+        provenance.push(serde_json::json!({
+            "tool": prov.tool,
+            "status": prov.status,
+            "detail": prov.detail,
+        }));
+        tools.insert(config.tool.clone(), tool_json);
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "inventory": tools,
+            "provenance": provenance,
+            "audit_rows": audit_rows_all,
+            "report_rows": report_rows,
+        }))
+        .expect("doc-audit report serializes")
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Aggregate a JSONL file of report rows into the fault dashboard.

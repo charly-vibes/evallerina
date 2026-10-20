@@ -9,6 +9,7 @@ tier0:
     cargo fmt --check
     cargo clippy -- -D warnings
     cargo test
+    cargo run --quiet -- doc-audit > /dev/null
 
 # Tier 1 — scripted replay of recorded AgentStep transcripts, no model, no network
 tier1:

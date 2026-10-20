@@ -278,3 +278,81 @@ fn dogfood_inventory_of_evallerina_surfaces_is_non_empty() {
         inv.surfaces.keys().collect::<Vec<_>>()
     );
 }
+
+// ---------------------------------------------------------------------------
+// Step 6: config parsing (`doc_audit.toml`) + report wiring — audit
+// rows become report_version 1 rows carrying the new check-codes;
+// report_version stays 1, additive only.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn doc_audit_toml_parses_tools_surface_none_and_binary() {
+    let toml = r#"
+[wai]
+repo = "../wai"
+
+[openspec]
+repo = "fission-ai/openspec"
+surface = "none"
+
+[ah]
+repo = "../espectacular"
+binary = "ah"
+"#;
+    let configs = doc_audit::parse_config(toml).expect("config parses");
+    let wai = configs.iter().find(|c| c.tool == "wai").expect("wai entry");
+    assert_eq!(wai.repo, "../wai");
+    assert!(!wai.surface_none);
+    assert_eq!(
+        wai.binary.as_deref(),
+        Some("wai"),
+        "binary defaults to the tool name"
+    );
+    let openspec = configs
+        .iter()
+        .find(|c| c.tool == "openspec")
+        .expect("openspec entry");
+    assert!(openspec.surface_none, "surface = none is parsed");
+    let ah = configs.iter().find(|c| c.tool == "ah").expect("ah entry");
+    assert_eq!(ah.binary.as_deref(), Some("ah"), "explicit binary wins");
+}
+
+#[test]
+fn audit_rows_flow_into_report_as_version_1_rows() {
+    use evallerina::report::{aggregate_rows, scenario_channel};
+
+    // The doc-audit scenario must have a declared output channel so
+    // aggregate_rows accepts its rows (additive wiring, no bump).
+    assert_eq!(scenario_channel("doc-audit"), Some("docs"));
+
+    let rows = vec![doc_audit::report_row(
+        "fakecli",
+        &[
+            doc_audit::AuditRow {
+                token: "orphaned".into(),
+                code: "ERR_DOC_NOT_FINDABLE".into(),
+            },
+            doc_audit::AuditRow {
+                token: "hidden".into(),
+                code: "ERR_FEATURE_UNDOCUMENTED".into(),
+            },
+        ],
+    )];
+    assert_eq!(rows[0]["report_version"], 1, "report_version stays 1");
+
+    let configured = vec!["model-a".to_owned()];
+    let dashboard = aggregate_rows(&rows, &configured, &scenario_channel)
+        .expect("doc-audit rows aggregate cleanly");
+    // Doc-audit rows carry no model attribution: they aggregate as
+    // non-tier-2 rows, visible in the routing entries (one per code),
+    // recorded without AIX-channel action (no cross-model signal).
+    let routing = dashboard["routing"].as_array().expect("routing");
+    assert_eq!(routing.len(), 2, "both codes are routing-visible");
+    let codes: Vec<&str> = routing
+        .iter()
+        .map(|c| c["code"].as_str().expect("code str"))
+        .collect();
+    assert!(codes.contains(&"ERR_FEATURE_UNDOCUMENTED"));
+    assert!(codes.contains(&"ERR_DOC_NOT_FINDABLE"));
+    assert_eq!(dashboard["report_version"], 1);
+}

@@ -1,0 +1,71 @@
+# doc_audit.toml — tier-0 doc-coverage audit config (evallerina-fok,
+# openspec add-ecosystem-doc-evals D1/D4). One `[tool]` section per
+# routing.toml tool. Relative `repo` paths resolve against the
+# evallerina repo root (same rules as routing.toml).
+#
+# Per tool:
+#   repo     — the repository whose doc surfaces are scanned
+#              (README.md, docs/**, llms.txt, AGENTS.md managed blocks)
+#   binary   — binary probed with `--help`; defaults to the tool name
+#   surface  — "none" for tools that are not --help-probeable CLIs:
+#              they skip the binary step and are recorded in
+#              provenance, never silently skipped.
+#
+# A missing binary records `binary_absent` provenance; a missing local
+# checkout records `repo_absent`. Every skip is provenance (anti-goal:
+# no silent skips).
+
+[wai]
+repo = "../wai"
+
+[genesis]
+repo = "../genesis"
+
+[espectacular]
+repo = "../espectacular"
+
+[dont]
+repo = "../dont"
+
+[testaruda]
+repo = "../testaruda"
+
+# turu's repo is `whisper` (binary/crate name mismatch; ddl canonical table).
+[turu]
+repo = "../whisper"
+binary = "turu"
+
+# `ah` shares the espectacular checkout (binary name of the espectacular CLI).
+[ah]
+repo = "../espectacular"
+
+[pretender]
+repo = "../pretender"
+
+[vampiro]
+repo = "../vampiro"
+
+[incitaciones]
+repo = "../incitaciones"
+
+# Third-party upstreams: not locally checked-out Rust CLIs — surface
+# none, provenance-recorded, never silent.
+[openspec]
+repo = "fission-ai/openspec"
+surface = "none"
+
+[specodelic]
+repo = "../specodelic"
+
+[funkalization]
+repo = "../funkalization"
+
+[wild]
+repo = "../wild"
+
+[dulce-de-leche]
+repo = "../dulce-de-leche"
+
+[bd]
+repo = "gastownhall/beads"
+surface = "none"

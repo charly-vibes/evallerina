@@ -31,6 +31,71 @@ const LLMS_SURFACE: &str = "llms.txt";
 const AGENTS_SURFACE: &str = "AGENTS.md";
 const DOCS_DIR: &str = "docs";
 
+/// Parse `doc_audit.toml` contents into per-tool configs. `binary`
+/// defaults to the tool name; `surface = "none"` marks the tool as
+/// binary-probe-skippable. Unknown fields are ignored (additive
+/// evolution) but a malformed value is a loud parse error.
+pub fn parse_config(toml_src: &str) -> Result<Vec<ToolConfig>, String> {
+    let value: toml::Value =
+        toml::from_str(toml_src).map_err(|e| format!("doc_audit.toml parse error: {e}"))?;
+    let table = value
+        .as_table()
+        .ok_or("doc_audit.toml must be a table of [tool] sections")?;
+    let mut configs = Vec::new();
+    for (tool, item) in table {
+        let repo = item
+            .get("repo")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("doc_audit.toml [{tool}] lacks a `repo` string"))?;
+        let surface = item
+            .get("surface")
+            .and_then(toml::Value::as_str)
+            .unwrap_or("binary");
+        if surface != "none" && surface != "binary" {
+            return Err(format!(
+                "doc_audit.toml [{tool}]: unknown surface '{surface}'"
+            ));
+        }
+        configs.push(ToolConfig {
+            tool: tool.clone(),
+            repo: repo.to_owned(),
+            binary: Some(
+                item.get("binary")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or(tool)
+                    .to_owned(),
+            ),
+            surface_none: surface == "none",
+        });
+    }
+    Ok(configs)
+}
+
+/// Shape one tool's audit rows as a report_version 1 report row (the
+/// additive wiring): a `doc-audit` scenario probing the `docs` channel,
+/// one failed check per audit row carrying the check-code. The existing
+/// dashboard aggregates these without modification.
+pub fn report_row(tool: &str, rows: &[AuditRow]) -> serde_json::Value {
+    let checks: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "name": format!("doc:{}", r.token),
+                "passed": false,
+                "code": r.code,
+                "reason": format!("feature token '{}' is undocumented or unfindable", r.token),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "report_version": 1,
+        "scenario": "doc-audit",
+        "tool": tool,
+        "status": "failed",
+        "checks": checks,
+    })
+}
+
 /// Per-tool audit configuration, parsed from the checked-in
 /// `doc_audit.toml` (`[tool]` sections, same shape as routing.toml).
 /// `surface_none` marks non-Rust-CLI tools (e.g. `bd`, `openspec`):
