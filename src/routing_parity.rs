@@ -31,6 +31,97 @@ pub const DDL_README: &str = "../dulce-de-leche/README.md";
 const MANAGED_START: &str = "<!-- MANAGED-TOOLS:START -->";
 const MANAGED_END: &str = "<!-- MANAGED-TOOLS:END -->";
 
+/// One parsed routing.toml `[tool]` entry: the repo reference plus the
+/// `upstream` flag. `upstream = true` is DATA only (openspec
+/// add-ecosystem-doc-evals): third-party upstreams (`bd`, `openspec`)
+/// must be mapped so parity is complete, but they are never filed in —
+/// the filing-side semantics (`skipped`/`unmapped_upstream`) belong to
+/// e4x and are out of scope here.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RoutingEntry {
+    pub repo: String,
+    pub upstream: bool,
+}
+
+/// The resolved repo reference for a managed tool — the spec's
+/// resolution chain made explicit so every branch is testable:
+/// explicit routing.toml entry (override wins) → ddl canonical-names
+/// table → binary-name fallback (`charly-vibes/<binary>`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResolvedRepo {
+    /// Explicit routing.toml entry — the override, always wins.
+    Override(String),
+    /// ddl's canonical-names table (name-mismatch rows).
+    Canonical(String),
+    /// Not in the table: first-party assumption `charly-vibes/<binary>`.
+    BinaryFallback(String),
+}
+
+impl ResolvedRepo {
+    /// The reference string behind the resolution.
+    pub fn reference(&self) -> &str {
+        match self {
+            ResolvedRepo::Override(r)
+            | ResolvedRepo::Canonical(r)
+            | ResolvedRepo::BinaryFallback(r) => r,
+        }
+    }
+}
+
+/// Resolve a managed tool's repo reference per the spec chain:
+/// explicit routing.toml entry (override wins) → ddl canonical-names
+/// table → binary-name fallback (`charly-vibes/<binary>`).
+pub fn resolve_repo(
+    tool: &str,
+    canonical: &BTreeMap<String, String>,
+    routing: &BTreeMap<String, RoutingEntry>,
+) -> ResolvedRepo {
+    if let Some(entry) = routing.get(tool) {
+        return ResolvedRepo::Override(entry.repo.clone());
+    }
+    if let Some(slug) = canonical.get(tool) {
+        return ResolvedRepo::Canonical(slug.clone());
+    }
+    ResolvedRepo::BinaryFallback(format!("charly-vibes/{tool}"))
+}
+
+/// Parse routing.toml content into `[tool]` → [`RoutingEntry`]. Every
+/// entry must carry a non-empty `repo` string; `upstream` is optional
+/// and must be a boolean when present. Structure mirrors
+/// [`crate::routing::parse_routing_toml`] (tool → repo strings) with
+/// the additive `upstream` flag; parse failures are loud errors.
+pub fn parse_routing_entries(content: &str) -> Result<BTreeMap<String, RoutingEntry>, String> {
+    let value: toml::Value =
+        toml::from_str(content).map_err(|e| format!("routing.toml parse error: {e}"))?;
+    let table = value
+        .as_table()
+        .ok_or("routing.toml must be a table of [tool] sections")?;
+    let mut map = BTreeMap::new();
+    for (tool, item) in table {
+        let repo = item
+            .get("repo")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("routing.toml [{tool}] lacks a `repo` string"))?;
+        if repo.trim().is_empty() {
+            return Err(format!("routing.toml [{tool}] has an empty `repo` path"));
+        }
+        let upstream = match item.get("upstream") {
+            None => false,
+            Some(v) => v
+                .as_bool()
+                .ok_or_else(|| format!("routing.toml [{tool}] `upstream` must be a boolean"))?,
+        };
+        map.insert(
+            tool.clone(),
+            RoutingEntry {
+                repo: repo.to_owned(),
+                upstream,
+            },
+        );
+    }
+    Ok(map)
+}
+
 /// Extract the managed tool list from the ddl README's MANAGED-TOOLS
 /// block. List items have the shape `- <Tier> (N): a, b, c.` — the
 /// declared count must match the parsed list (ddl drift-tests its own

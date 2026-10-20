@@ -17,6 +17,7 @@
 //! sibling may warn).
 
 use evallerina::routing_parity;
+use std::collections::BTreeMap;
 
 /// Fixture ddl README: managed block + canonical-names table, mirroring
 /// the real `../dulce-de-leche/README.md` shape (tier annotations with
@@ -141,4 +142,50 @@ fn malformed_table_row_is_a_loud_parse_error() {
     );
     let err = routing_parity::parse_canonical_repos(&broken).unwrap_err();
     assert!(err.contains("turu"), "got: {err}");
+}
+
+// ---------------------------------------------------------------------------
+// Step 2: the resolver — canonical table → binary-name fallback →
+// explicit routing.toml override (spec: Repo resolution fallback).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tool_listed_in_canonical_table_resolves_to_the_tables_repo() {
+    // turu is a name-mismatch row: the resolved repo is the table's
+    // repository column, not the binary name.
+    let canonical = routing_parity::parse_canonical_repos(FIXTURE_README).unwrap();
+    assert_eq!(
+        routing_parity::resolve_repo("turu", &canonical, &BTreeMap::new()),
+        routing_parity::ResolvedRepo::Canonical("charly-vibes/whisper".to_owned())
+    );
+}
+
+#[test]
+fn tool_absent_from_table_falls_back_to_the_binary_name() {
+    // testaruda is deliberately not in the table (no binary/crate
+    // mismatch): the first-party assumption is charly-vibes/<binary>.
+    let canonical = routing_parity::parse_canonical_repos(FIXTURE_README).unwrap();
+    assert_eq!(
+        routing_parity::resolve_repo("testaruda", &canonical, &BTreeMap::new()),
+        routing_parity::ResolvedRepo::BinaryFallback("charly-vibes/testaruda".to_owned())
+    );
+}
+
+#[test]
+fn explicit_routing_toml_entry_wins_over_both() {
+    // The explicit entry is the override — a local worktree path or a
+    // fork beats the canonical table and the binary-name fallback.
+    let canonical = routing_parity::parse_canonical_repos(FIXTURE_README).unwrap();
+    let mut routing = BTreeMap::new();
+    routing.insert(
+        "turu".to_owned(),
+        routing_parity::RoutingEntry {
+            repo: "../my-whisper-worktree".to_owned(),
+            upstream: false,
+        },
+    );
+    assert_eq!(
+        routing_parity::resolve_repo("turu", &canonical, &routing),
+        routing_parity::ResolvedRepo::Override("../my-whisper-worktree".to_owned())
+    );
 }
