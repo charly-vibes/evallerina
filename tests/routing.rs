@@ -222,9 +222,13 @@ fn upstream_tool_audit_rows_are_skipped_never_filing_candidates() {
         .iter()
         .map(|m| doc_audit_row("bd", m, "ERR_FEATURE_UNDOCUMENTED"))
         .collect();
-    let proposals =
-        routing::propose(&rows, &three_models(), &recorded_wai, &repo_map_with_upstream())
-            .expect("upstream tools are recorded, not dropped");
+    let proposals = routing::propose(
+        &rows,
+        &three_models(),
+        &recorded_wai,
+        &repo_map_with_upstream(),
+    )
+    .expect("upstream tools are recorded, not dropped");
     assert_eq!(proposals.len(), 1);
     let p = &proposals[0].to_json();
     assert_eq!(p["decision"], "skipped");
@@ -236,9 +240,15 @@ fn upstream_tool_audit_rows_are_skipped_never_filing_candidates() {
     let mut spy = BdSpy::new();
     routing::file_proposals(std::slice::from_mut(&mut row), true, &mut spy.runner())
         .expect("filing must not fail on an upstream row");
-    assert_eq!(row.decision, "skipped", "upstream rows are never filing candidates");
+    assert_eq!(
+        row.decision, "skipped",
+        "upstream rows are never filing candidates"
+    );
     assert_eq!(row.reason.as_deref(), Some("unmapped_upstream"));
-    assert!(spy.create_calls().is_empty(), "upstream tools are NEVER filed");
+    assert!(
+        spy.create_calls().is_empty(),
+        "upstream tools are NEVER filed"
+    );
 }
 
 #[test]
@@ -276,19 +286,18 @@ fn recorded_wai(scenario: &str) -> Option<String> {
 }
 
 fn repo_map() -> std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> {
-    [
-        (
-            "wai".to_owned(),
-            evallerina::routing_parity::RoutingEntry {
-                repo: "../wai".to_owned(),
-                upstream: false,
-            },
-        ),
-    ]
+    [(
+        "wai".to_owned(),
+        evallerina::routing_parity::RoutingEntry {
+            repo: "../wai".to_owned(),
+            upstream: false,
+        },
+    )]
     .into()
 }
 
-fn repo_map_with_upstream() -> std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> {
+fn repo_map_with_upstream()
+-> std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> {
     [
         (
             "wai".to_owned(),
@@ -415,13 +424,17 @@ fn routing_toml_parses_tools_to_repos() {
     let toml_src = "[wai]\nrepo = \"../wai\"\n\n[genesis]\nrepo = \"../genesis\"\n";
     let map = evallerina::routing_parity::parse_routing_entries(toml_src).expect("parses");
     assert_eq!(map.get("wai").map(|e| e.repo.as_str()), Some("../wai"));
-    assert_eq!(map.get("genesis").map(|e| e.repo.as_str()), Some("../genesis"));
+    assert_eq!(
+        map.get("genesis").map(|e| e.repo.as_str()),
+        Some("../genesis")
+    );
 }
 
 #[test]
 fn routing_toml_missing_repo_is_loud() {
-    let err = evallerina::routing_parity::parse_routing_entries("[wai]\ndescription = \"no repo\"\n")
-        .expect_err("missing repo is a loud error");
+    let err =
+        evallerina::routing_parity::parse_routing_entries("[wai]\ndescription = \"no repo\"\n")
+            .expect_err("missing repo is a loud error");
     assert!(err.contains("repo"));
 }
 

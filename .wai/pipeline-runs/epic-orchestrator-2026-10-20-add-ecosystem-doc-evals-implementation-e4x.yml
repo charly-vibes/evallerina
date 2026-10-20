@@ -2,7 +2,7 @@ run_id: epic-orchestrator-2026-10-20-add-ecosystem-doc-evals-implementation-e4x
 pipeline: epic-orchestrator
 topic: add-ecosystem-doc-evals implementation e4x
 created_at: '2026-10-20T20:37:14.743655955+00:00'
-current_step: 2
+current_step: 3
 approvals: {}
 epic: null
 child_issues: []
