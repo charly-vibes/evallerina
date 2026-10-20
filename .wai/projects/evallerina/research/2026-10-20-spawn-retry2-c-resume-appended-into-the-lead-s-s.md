@@ -7,3 +7,4 @@ SPAWN-RETRY2: -c resume appended into the lead's session (pi -c = most-recent-se
 Evidence (commands run): ps -o pid,etime -p <pid> → process alive; stat -c %y <session jsonl> → grew during run; git log --oneline tracked commits landing (bb07093..17454ad); no repo mutation by lead. Non-code orchestration step.
 Verdict: CONFIRM (non-review artifact — spawn logistics confirmed by pid/session/timestamp evidence above).
 Reads cited: .wai/projects/evallerina/logs/evallerina-0sy-implement2.log; .wai/projects/evallerina/research/verify-evallerina-0sy.md; session JSONL 2026-10-20T18-22-54-724Z_01a15a8d.
+Fresh test-run output (from verifier artifact .wai/projects/evallerina/research/verify-evallerina-0sy.md): `cargo test` → 123 passed, 0 failed; `just tier0` → exit 0; `evallerina routing-parity` → 13 rows, all ok, exit 0.
