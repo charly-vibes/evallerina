@@ -17,6 +17,9 @@
 //! drift. Normalization rules are general (lowercase, alphanumeric-only
 //! canonical form) and never tuned to pass evallerina's own docs; there
 //! is deliberately no aggregate doc-quality score — per-token rows only.
+//! Audit rows feed the existing fault-routing path via [`routing_rows`]
+//! (evallerina-e4x): dry-run proposals by default, filing only behind
+//! explicit `--file` authorization.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -94,6 +97,34 @@ pub fn report_row(tool: &str, rows: &[AuditRow]) -> serde_json::Value {
         "status": "failed",
         "checks": checks,
     })
+}
+
+/// Bridge doc-audit report rows into the fault-routing intake
+/// (evallerina-e4x, openspec add-ecosystem-doc-evals task 3.2). A
+/// tier-0 audit is a static, model-independent check: its findings
+/// apply to the whole configured battery by construction, so each
+/// report row is attributed to every configured model id. That keeps
+/// routing's cross-model threshold semantics verbatim (design D3 — no
+/// new routing semantics): a battery-wide finding crosses the
+/// battery-wide threshold honestly, and the proposal provenance names
+/// every attributed model. The rows carry `kind: "doc_audit"` (routing
+/// only skips `absent`) and keep the audited tool in the `tool` field,
+/// which routing uses as the repo key for doc-coverage codes.
+pub fn routing_rows(
+    report_rows: &[serde_json::Value],
+    models: &[String],
+) -> Vec<serde_json::Value> {
+    report_rows
+        .iter()
+        .flat_map(|row| {
+            models.iter().map(move |model| {
+                let mut routed = row.clone();
+                routed["kind"] = serde_json::json!("doc_audit");
+                routed["model"] = serde_json::json!(model);
+                routed
+            })
+        })
+        .collect()
 }
 
 /// Per-tool audit configuration, parsed from the checked-in

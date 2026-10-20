@@ -112,10 +112,22 @@ enum Command {
     /// surfaces (README, docs/**, llms.txt, AGENTS.md managed blocks),
     /// and emit per-token audit rows (ERR_FEATURE_UNDOCUMENTED /
     /// ERR_DOC_NOT_FINDABLE) plus provenance for every non-extracted
-    /// source — never a silent skip. Prints the audit as JSON. Findings
-    /// are the record, not failures: exit nonzero only on loud errors
-    /// (missing/malformed config, unreadable surface).
-    DocAudit,
+    /// source — never a silent skip. Prints the audit as JSON, including
+    /// the dry-run fault-routing proposals fed from the audit rows
+    /// (evallerina-e4x). Findings are the record, not failures: exit
+    /// nonzero only on loud errors (missing/malformed config, unreadable
+    /// surface).
+    DocAudit {
+        /// Write the dry-run routing proposals (proposed-tickets.jsonl
+        /// content, one JSON object per line) to this path.
+        #[arg(long)]
+        proposals_out: Option<String>,
+        /// File the routed proposals in their mapped repositories
+        /// (explicit cross-repo write authorization). Dry-run is the
+        /// default: without --file no bd call ever happens.
+        #[arg(long)]
+        file: bool,
+    },
     /// Tier-0 routing-map parity gate (evallerina-0sy): diff
     /// routing.toml against dulce-de-leche's MANAGED-TOOLS block
     /// (../dulce-de-leche/README.md). Prints the parity report as JSON
@@ -175,7 +187,10 @@ fn main() -> std::process::ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Command::DocAudit => match run_doc_audit() {
+        Command::DocAudit {
+            proposals_out,
+            file,
+        } => match run_doc_audit(proposals_out.as_deref(), file) {
             Ok(code) => code,
             Err(e) => {
                 eprintln!("doc-audit: {e}");
@@ -300,11 +315,14 @@ fn run_routing_parity() -> Result<ExitCode, String> {
 /// per tool (binary probe, or `skip`/`binary_absent` provenance —
 /// never a silent skip), scan each tool's local repo surfaces into a
 /// doc inventory, and diff the two into per-token audit rows that also
-/// flow into the report contract as report_version 1 rows. Findings
-/// are the record, not gate failures (the dashboard is the record);
-/// nonzero exit is reserved for loud errors: missing/malformed config,
-/// unreadable surfaces.
-fn run_doc_audit() -> Result<ExitCode, String> {
+/// flow into the report contract as report_version 1 rows. The audit
+/// rows then feed the existing fault-routing path (evallerina-e4x):
+/// dry-run proposals by default — `--file` is the only escalation, and
+/// without it no bd call ever happens (anti-goal, pinned by test).
+/// Findings are the record, not gate failures (the dashboard is the
+/// record); nonzero exit is reserved for loud errors:
+/// missing/malformed config, unreadable surfaces.
+fn run_doc_audit(proposals_out: Option<&str>, file: bool) -> Result<ExitCode, String> {
     let root = evallerina::routing::discover_root()?;
     let root_path = std::path::PathBuf::from(&root);
     let config_path = root_path.join("doc_audit.toml");
@@ -356,6 +374,25 @@ fn run_doc_audit() -> Result<ExitCode, String> {
         tools.insert(config.tool.clone(), tool_json);
     }
 
+    // Routing intake (evallerina-e4x): bridge the audit rows into the
+    // existing fault-routing path (design D3 — propose() semantics
+    // reused verbatim). Dry-run by default; --file authorizes filing.
+    let configured: Vec<String> = ordered_ids().into_iter().map(String::from).collect();
+    let intake = evallerina::doc_audit::routing_rows(&report_rows, &configured);
+    let routing_toml_path = root_path.join("routing.toml");
+    let routing_toml = std::fs::read_to_string(&routing_toml_path)
+        .map_err(|e| format!("cannot read {}: {e}", routing_toml_path.display()))?;
+    let repo_map = evallerina::routing_parity::parse_routing_entries(&routing_toml)?;
+    let no_recorded_tool = |_: &str| -> Option<String> { None };
+    let mut proposals =
+        evallerina::routing::propose(&intake, &configured, &no_recorded_tool, &repo_map)?;
+    let mut runner = evallerina::routing::run_bd;
+    evallerina::routing::file_proposals(&mut proposals, file, &mut runner)?;
+    if let Some(out) = proposals_out {
+        std::fs::write(out, evallerina::routing::to_jsonl(&proposals))
+            .map_err(|e| format!("cannot write proposals to {out}: {e}"))?;
+    }
+
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
@@ -363,6 +400,7 @@ fn run_doc_audit() -> Result<ExitCode, String> {
             "provenance": provenance,
             "audit_rows": audit_rows_all,
             "report_rows": report_rows,
+            "proposals": proposals.iter().map(|p| p.to_json()).collect::<Vec<_>>(),
         }))
         .expect("doc-audit report serializes")
     );
