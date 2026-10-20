@@ -5,3 +5,7 @@ steps: []
   - claim:e6ed26df80367fb73afa35250b6ac27b4a75e890
   - gates:e6ed26df80367fb73afa35250b6ac27b4a75e890
   - brief:cfd81938fe723061f29b45d84cd6e513d5ac1d28
+  - spawn:150f3e2c9f42a6185584b0cbfdb0f21150c78a1f
+  - spawn-retry:150f3e2c9f42a6185584b0cbfdb0f21150c78a1f
+  - verify:150f3e2c9f42a6185584b0cbfdb0f21150c78a1f
+  - ship:150f3e2c9f42a6185584b0cbfdb0f21150c78a1f
