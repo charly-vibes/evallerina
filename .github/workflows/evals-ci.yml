@@ -34,6 +34,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Routing-parity source of truth (evallerina-0sy, design D2):
+      # ddl's MANAGED-TOOLS block. Checked out next to the repo root so
+      # the gate enforces in CI instead of degrading to a warning.
+      - name: Checkout dulce-de-leche sibling (MANAGED-TOOLS source of truth)
+        uses: actions/checkout@v4
+        with:
+          repository: charly-vibes/dulce-de-leche
+          path: dulce-de-leche
+
+      # First-party routing siblings: routing.toml repo paths must
+      # resolve from the repo root (stale-path check), so every
+      # first-party entry's checkout must exist in CI. Local dev
+      # workspaces have them; standalone clones degrade via the absent
+      # ddl sibling, never silently.
+      - name: Check out first-party routing siblings (../<name>)
+        run: |
+          mv dulce-de-leche ../dulce-de-leche
+          for repo in wai genesis espectacular dont testaruda whisper pretender vampiro incitaciones specodelic funkalization wild; do
+            git clone --quiet --depth 1 "https://github.com/charly-vibes/${repo}.git" "../${repo}"
+          done
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:

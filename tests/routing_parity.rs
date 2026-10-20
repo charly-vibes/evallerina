@@ -478,3 +478,47 @@ fn upstream_entries_are_never_path_checked() {
         assert_eq!(row.status, routing_parity::RowStatus::Ok, "{row:?}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Step 5: the real-workspace gate — this test IS the tier-0
+// enforcement: any drift between the checked-in routing.toml and the
+// ddl sibling's MANAGED-TOOLS block fails `cargo test` (and thus
+// `just tier0`) naming the drifted tool.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn real_workspace_parity_is_green() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let readme_path = root.join(routing_parity::DDL_README);
+    let readme = std::fs::read_to_string(&readme_path).ok();
+    let toml =
+        std::fs::read_to_string(root.join("routing.toml")).expect("routing.toml is checked in");
+    let report = routing_parity::routing_parity(readme.as_deref(), &toml, &root)
+        .expect("gate runs against the real workspace");
+
+    if report.degraded {
+        // Sibling genuinely absent (standalone clone): warning only,
+        // exit 0 — this is the ONE sanctioned degradation.
+        assert_eq!(report.rows.len(), 1, "degraded report has one warn row");
+        assert_eq!(report.rows[0].status, routing_parity::RowStatus::Warn);
+        return;
+    }
+
+    let fails = failing_rows(&report);
+    assert!(
+        fails.is_empty(),
+        "routing-parity drift between routing.toml and ddl's MANAGED-TOOLS block: {fails:?}"
+    );
+    // One row per managed tool — the gate never silently skips a
+    // first-party tool (anti-goal).
+    assert_eq!(report.rows.len(), 13, "one row per managed tool");
+    // The upstream entries resolve as data rows.
+    for tool in ["bd", "openspec"] {
+        let row = report
+            .rows
+            .iter()
+            .find(|r| r.tool == tool)
+            .unwrap_or_else(|| panic!("missing row for {tool}: {report:?}"));
+        assert_eq!(row.status, routing_parity::RowStatus::Ok, "{row:?}");
+    }
+}

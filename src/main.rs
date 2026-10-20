@@ -107,6 +107,13 @@ enum Command {
         #[arg(long)]
         file: bool,
     },
+    /// Tier-0 routing-map parity gate (evallerina-0sy): diff
+    /// routing.toml against dulce-de-leche's MANAGED-TOOLS block
+    /// (../dulce-de-leche/README.md). Prints the parity report as JSON
+    /// (degraded flag + one row per managed tool) and exits nonzero iff
+    /// any row failed; an absent ddl sibling degrades to a warning row
+    /// with exit 0 (standalone clones), never covering a parse failure.
+    RoutingParity,
 }
 
 /// The hermetic static artifact set the full arm provisions by default
@@ -153,6 +160,13 @@ fn main() -> std::process::ExitCode {
             }
         },
         Command::Report { path, route, file } => match run_report(&path, route, file) {
+            Ok(code) => code,
+            Err(msg) => {
+                eprintln!("{msg}");
+                ExitCode::FAILURE
+            }
+        },
+        Command::RoutingParity => match run_routing_parity() {
             Ok(code) => code,
             Err(msg) => {
                 eprintln!("{msg}");
@@ -231,6 +245,34 @@ fn run_live(
         println!("{}", serde_json::to_string(event).unwrap());
     }
     if trial_failed {
+        Ok(ExitCode::FAILURE)
+    } else {
+        Ok(ExitCode::SUCCESS)
+    }
+}
+
+/// Tier-0 routing-map parity gate (evallerina-0sy): read the checked-in
+/// routing.toml and the ddl sibling README relative to the repo root
+/// (discovered worktree-safe), run
+/// [`evallerina::routing_parity::routing_parity`], and print the parity
+/// report as JSON. Exit nonzero
+/// iff any parity row failed (`ERR_ROUTING_PARITY` rows carry tool +
+/// detail); an absent ddl sibling degrades to a warning row with exit
+/// 0 — parse failures stay loud and nonzero.
+fn run_routing_parity() -> Result<ExitCode, String> {
+    let root = evallerina::routing::discover_root()?;
+    let root_path = std::path::PathBuf::from(&root);
+    let toml_path = root_path.join("routing.toml");
+    let toml = std::fs::read_to_string(&toml_path)
+        .map_err(|e| format!("cannot read {}: {e}", toml_path.display()))?;
+    let readme_path = root_path.join(evallerina::routing_parity::DDL_README);
+    let readme = std::fs::read_to_string(&readme_path).ok();
+    let report = evallerina::routing_parity::routing_parity(readme.as_deref(), &toml, &root_path)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&report.to_json()).expect("parity report serializes")
+    );
+    if report.failed() {
         Ok(ExitCode::FAILURE)
     } else {
         Ok(ExitCode::SUCCESS)

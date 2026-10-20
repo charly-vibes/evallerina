@@ -1,9 +1,15 @@
-# routing.toml — fault→ticket routing map (openspec add-fault-ticket-routing)
-# Maps each dulce-de-leche family tool to the repository its tickets live in.
+# routing.toml — fault→ticket routing map (openspec add-fault-ticket-routing,
+# expanded to the full ecosystem by evallerina-0sy /
+# add-ecosystem-doc-evals D2). Maps each dulce-de-leche family tool to the
+# repository its tickets live in. The managed tool list is mirrored from
+# ddl's MANAGED-TOOLS block (../dulce-de-leche/README.md) and enforced by
+# the tier-0 routing-parity gate (`evallerina routing-parity`; drift fails
+# `just tier0` via tests/routing_parity.rs).
+#
 # Relative paths resolve against the evallerina repo root (git rev-parse
 # --show-toplevel, worktree-safe); absolute paths pass through (target-repo
-# worktrees). Filing is evallerina-2bz; dry-run proposals reference these
-# paths from Phase 1 onward.
+# worktrees). Entries marked `upstream = true` are third-party: mapped for
+# parity completeness, but never filed in (filing semantics: e4x).
 
 [wai]
 repo = "../wai"
@@ -16,3 +22,46 @@ repo = "../espectacular"
 
 [dont]
 repo = "../dont"
+
+# --- managed tools beyond the original four (evallerina-0sy) ---
+
+[testaruda]
+repo = "../testaruda"
+
+# turu's repo is `whisper` (binary/crate name mismatch; ddl canonical table).
+[turu]
+repo = "../whisper"
+
+# `ah` shares the espectacular checkout (binary name of the espectacular CLI).
+[ah]
+repo = "../espectacular"
+
+[pretender]
+repo = "../pretender"
+
+[vampiro]
+repo = "../vampiro"
+
+[incitaciones]
+repo = "../incitaciones"
+
+# Third-party upstreams: mapped (parity requires the entry), never filed.
+[openspec]
+repo = "fission-ai/openspec"
+upstream = true
+
+[specodelic]
+repo = "../specodelic"
+
+[funkalization]
+repo = "../funkalization"
+
+[wild]
+repo = "../wild"
+
+[dulce-de-leche]
+repo = "../dulce-de-leche"
+
+[bd]
+repo = "gastownhall/beads"
+upstream = true
