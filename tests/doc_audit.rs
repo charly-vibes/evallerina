@@ -173,3 +173,60 @@ fn inventory_scanner_separates_surfaces_and_breadcrumbs() {
         .expect("llms.txt surface present");
     assert!(llms.contains("dryrun"), "llms.txt tokens: {llms:?}");
 }
+
+// ---------------------------------------------------------------------------
+// Step 4: breadcrumb reachability — token in docs/x.md not reachable
+// from llms.txt / managed block → ERR_DOC_NOT_FINDABLE; token absent
+// everywhere → ERR_FEATURE_UNDOCUMENTED; reachable token → no row.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn reachability_distinguishes_not_findable_from_undocumented() {
+    let dir = fresh_dir("reach");
+    // Fixture surface: three features from --help.
+    let bin = dir.join("fakecli");
+    fs::write(
+        &bin,
+        "#!/usr/bin/env bash\nexec cat <<'HELP'\nUsage: fakecli\n\nCommands:\n  findable   Documented and findable\n  orphaned   Documented but unreachable\n  hidden     Absent from all docs\nHELP\n",
+    )
+    .expect("write fixture script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("chmod fixture");
+    }
+
+    fs::write(
+        dir.join("README.md"),
+        "docs for `orphaned` live in docs/x.md\n",
+    )
+    .expect("write README");
+    fs::create_dir_all(dir.join("docs")).expect("mkdir docs");
+    fs::write(dir.join("docs/x.md"), "the `findable` command reference\n")
+        .expect("write docs/x.md");
+    // Breadcrumbs mention only `findable` (and reference docs/x.md).
+    fs::write(dir.join("llms.txt"), "start at docs/x.md; try `findable`\n")
+        .expect("write llms.txt");
+
+    let surface = doc_audit::extract_surface(bin.to_str().expect("utf8 path"))
+        .expect("surface extraction succeeds");
+    let inv = doc_audit::scan_inventory(&dir).expect("inventory scan succeeds");
+    let rows = doc_audit::audit(&surface, &inv);
+
+    let findable_rows: Vec<_> = rows.iter().filter(|r| r.token == "findable").collect();
+    assert!(
+        findable_rows.is_empty(),
+        "reachable token must produce no row: {rows:?}"
+    );
+    let orphaned = rows
+        .iter()
+        .find(|r| r.token == "orphaned")
+        .expect("orphaned token must produce a row");
+    assert_eq!(orphaned.code, "ERR_DOC_NOT_FINDABLE");
+    let hidden = rows
+        .iter()
+        .find(|r| r.token == "hidden")
+        .expect("hidden token must produce a row");
+    assert_eq!(hidden.code, "ERR_FEATURE_UNDOCUMENTED");
+    assert_eq!(rows.len(), 2, "exactly the two drift rows: {rows:?}");
+}

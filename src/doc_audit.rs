@@ -193,6 +193,48 @@ fn harvest_doc_tokens(text: &str) -> BTreeSet<String> {
     tokens
 }
 
+/// The two doc-coverage check-codes. `ERR_FEATURE_UNDOCUMENTED`: a
+/// surface token absent from every scanned surface. `ERR_DOC_NOT_FINDABLE`:
+/// a token documented on some surface but not reachable from the
+/// breadcrumb channels (llms.txt / managed blocks).
+pub const ERR_FEATURE_UNDOCUMENTED: &str = "ERR_FEATURE_UNDOCUMENTED";
+pub const ERR_DOC_NOT_FINDABLE: &str = "ERR_DOC_NOT_FINDABLE";
+
+/// One doc-coverage audit row: a surface feature token that is either
+/// undocumented or unfindable. Deliberately per-token — no aggregate
+/// doc-quality score exists (anti-goal, pinned by test).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AuditRow {
+    pub token: String,
+    pub code: String,
+}
+
+/// Diff a tool's surface tokens against a doc inventory: absent from
+/// all surfaces → `ERR_FEATURE_UNDOCUMENTED`; present on some surface
+/// but unreachable from breadcrumbs → `ERR_DOC_NOT_FINDABLE`; present
+/// and reachable → no row.
+pub fn audit(surface: &BTreeSet<String>, inv: &Inventory) -> Vec<AuditRow> {
+    let documented: BTreeSet<&String> = inv.surfaces.values().flatten().collect();
+    surface
+        .iter()
+        .filter_map(|token| {
+            if !documented.contains(token) {
+                Some(AuditRow {
+                    token: token.clone(),
+                    code: ERR_FEATURE_UNDOCUMENTED.to_owned(),
+                })
+            } else if !inv.breadcrumbs.contains(token) {
+                Some(AuditRow {
+                    token: token.clone(),
+                    code: ERR_DOC_NOT_FINDABLE.to_owned(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 /// Run the surface step for one configured tool: either record the
 /// `skip` provenance (`surface = "none"`), or probe the binary and
 /// harvest its token set. A missing binary is `binary_absent` provenance
