@@ -31,10 +31,16 @@
 
 ## 3. Routing integration for audit faults
 
-- [ ] 3.1 Failing test: audit row with ERR_FEATURE_UNDOCUMENTED crosses
+- [x] 3.1 Failing test: audit row with ERR_FEATURE_UNDOCUMENTED crosses
   threshold → dry-run proposal with token `evallerina:<scenario>:<fault-class>`
-- [ ] 3.2 Dry-run smoke against latest tier-2 rows; review proposals before
+  (evallerina-e4x: both doc codes + upstream skip + dedup pinned;
+  CLI dry-run default pinned hermetically in tests/doc_audit_cli.rs)
+- [x] 3.2 Dry-run smoke against latest tier-2 rows; review proposals before
   any filing (mirrors 4.3 of add-fault-ticket-routing)
+  (evallerina-e4x: dry-run smoke against `cargo run -- doc-audit` rows —
+  16 dry_run proposals, review + evidence in
+  .wai/projects/evallerina/research/evallerina-e4x-dry-run-review.org;
+  no --file ever passed)
 
 ## 4. Doc-findability scenarios (first tools)
 

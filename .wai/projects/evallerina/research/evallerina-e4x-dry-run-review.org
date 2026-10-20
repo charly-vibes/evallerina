@@ -1,0 +1,41 @@
+#+TITLE: evallerina-e4x — task 3.2 dry-run proposal review (no filing)
+#+DATE: <2026-07-18>
+
+* Run
+
+#+begin_example
+cargo run --quiet -- doc-audit \
+  --proposals-out .wai/projects/evallerina/research/proposed-tickets-doc-audit-e4x.jsonl
+# exit 0; 16 proposal rows written; NO --file passed — nothing filed
+#+end_example
+
+* Evidence artifact
+
+- =.wai/projects/evallerina/research/proposed-tickets-doc-audit-e4x.jsonl=
+  (16 lines, proposed-tickets.jsonl schema: tool/repo/scenario/fault_class/
+  token/decision/reason/bd_issue_id/row_provenance)
+
+* Review findings
+
+1. *16 proposals, all =dry_run=.* 9 tools produced audit rows
+   (ah 7, dont 32, incitaciones 6, pretender 10, specodelic 12,
+   testaruda 14, turu 4, vampiro 4, wai 2 — 91 audit rows collapse to
+   16 routing keys: (doc-audit, code, tool)).
+2. *Every repo target matches routing.toml:* ah → ../espectacular,
+   turu → ../whisper (binary/crate-name mismatch honored), others →
+   their own sibling checkout.
+3. *Upstream tools (bd, openspec) are absent from the proposals* —
+   =surface = none= yields no audit rows today, and the upstream guard
+   is pinned separately by tests (=upstream_tool_audit_rows_are_skipped_never_filing_candidates=).
+4. *No filing occurred:* dry-run default, zero bd calls
+   (anti-goal pinned end to end by =tests/doc_audit_cli.rs=).
+
+* Caveat → follow-up (not forked, per brief)
+
+All tokens have the fixed =evallerina:<scenario>:<fault-class>= shape,
+so the token does not distinguish tools: =ah= and =espectacular= both map
+to =../espectacular=. Harmless today (espectacular's binary is absent →
+zero audit rows), but if espectacular gains a probed surface, two
+proposals with the same token could over-dedup to one ticket in that
+shared repo. No second routing path was forked (brief follow-up
+threshold); a bd follow-up records it.
