@@ -12,6 +12,7 @@
 //! output (wai 2026.10.5) carries remediation under `data.remediation`.
 
 pub mod ablation;
+pub mod doc_audit;
 pub mod envelope;
 pub mod live;
 pub mod recorded;
