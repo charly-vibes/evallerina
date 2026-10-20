@@ -1,0 +1,24 @@
+Implementation complete. All 5 TDD steps landed, `just tier0` exits 0, nothing pushed, beads untouched.
+
+## Commits (5, all `evallerina-0sy:` prefix)
+
+| Commit | Step |
+|---|---|
+| `dbd9a1a` | step 1 — ddl README parser (red→green): `parse_managed_tools` (MANAGED-TOOLS block, count-vs-list drift check, loud on malformed list lines) + `parse_canonical_repos` (backticked-cell parsing incl. `` `ddl` (this tool) `` and npm-annotated crate cells) |
+| `bb07093` | step 2 — resolver (red→green): `resolve_repo` → `ResolvedRepo::{Override, Canonical, BinaryFallback}` (routing.toml override wins; `turu`→`charly-vibes/whisper` via table; `testaruda`→`charly-vibes/testaruda` fallback) + `parse_routing_entries` (`repo` + optional boolean `upstream`) |
+| `c824944` | step 3 — gate (red→green): `routing_parity()` — missing entry fails naming the tool (`ERR_ROUTING_PARITY`), unresolved path fails naming tool+bad path, absent ddl sibling → degraded warn/exit 0; parse failures always loud (anti-goal honored) |
+| `707eead` | step 4 — upstream policy (red→green): `upstream = true` is the explicit override (bd's fallback identity looks first-party; flag wins), data-only (never path-checked/never filed — e4x); canonical third-party identity without flag fails |
+| `17454ad` | step 5 — wiring: `evallerina routing-parity` subcommand (JSON report, nonzero iff fail rows), routing.toml expanded to all 13 managed tools + genesis/espectacular/ddl (`bd`→gastownhall/beads, `openspec`→fission-ai/openspec with `upstream = true`), real-workspace gate test (the tier-0 drift enforcement), GHA tier-0 job checks out dulce-de-leche → `../dulce-de-leche` plus the first-party siblings so stale-path checks enforce in CI |
+
+## Test results
+- `cargo test` per step: red (compile error / assertion) before each implementation, green after — final: **123 passed, 0 failed** across all suites.
+- `just tier0` (fmt --check + clippy -D warnings + full test suite): **exit 0**.
+- Negative hand-check per brief: commented out `[vampiro]` → `just tier0` failed (exit 101) with `ERR_ROUTING_PARITY: unmapped first-party tool 'vampiro'` — restored, green again.
+- `evallerina routing-parity` live: 13 rows, all ok, exit 0.
+
+## Notes / deviations (documented in commits)
+- `[ah]` added to routing.toml (brief item 5 omitted it; openspec task 1.4 explicitly includes it — without it the gate fails on `ah`).
+- CI checks out the first-party siblings too (brief names only ddl): required because the gate's stale-path check (brief step 3: unresolved path → fail) would otherwise fail permanently in CI where only `../dulce-de-leche` exists. ddl itself goes via `actions/checkout` + `mv` as briefed; siblings via a single depth-1 clone loop.
+- `bd` with a missing entry fails as "unmapped tool" rather than "upstream entry missing" — bd's third-party-ness is only knowable from its own entry flag; still fails naming bd, and pinned by a dedicated test.
+
+Remaining working-tree changes (`.wai/` state + logs) predate this run — left untouched, not committed.

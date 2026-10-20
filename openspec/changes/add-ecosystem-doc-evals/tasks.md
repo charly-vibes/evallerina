@@ -2,15 +2,15 @@
 
 ## 1. Routing map parity (no battery change)
 
-- [ ] 1.1 Failing test: routing-parity parser — fixture README with a
+- [x] 1.1 Failing test: routing-parity parser — fixture README with a
   MANAGED-TOOLS block + canonical-names table → expected tool→repo pairs
-- [ ] 1.2 Implement `routing_parity()` in `src/routing.rs` (or new module):
+- [x] 1.2 Implement `routing_parity()` in `src/routing.rs` (or new module):
   parse sibling ddl README managed block, diff against routing.toml entries,
   unresolved paths fail, absent sibling → warning
-- [ ] 1.3 Wire into tier-0 (`just tier0` / main.rs subcommand) and add
+- [x] 1.3 Wire into tier-0 (`just tier0` / main.rs subcommand) and add
   `ERR_ROUTING_PARITY` reporting; GHA workflows check out the ddl sibling so
   the gate enforces in CI (warning-only in local standalone clones)
-- [ ] 1.4 Expand routing.toml: testaruda, turu(whisper), ah(espectacular
+- [x] 1.4 Expand routing.toml: testaruda, turu(whisper), ah(espectacular
   exists), pretender, vampiro, incitaciones, openspec (`upstream = true`),
   specodelic, funkalization, wild, dulce-de-leche, bd (`upstream = true`);
   verify parity check green

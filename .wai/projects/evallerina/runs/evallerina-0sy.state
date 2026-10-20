@@ -5,3 +5,11 @@ steps: []
   - claim:c7e72608ccc3c40c5576c6b9d648c92412ff1ac1
   - gates:c7e72608ccc3c40c5576c6b9d648c92412ff1ac1
 brief_path: .wai/projects/evallerina/briefs/evallerina-0sy.md
+  - brief:c40fc23f78e46ca185ffa1cee1a8fd916642a58d
+  - brief:c40fc23f78e46ca185ffa1cee1a8fd916642a58d
+  - spawn:c40fc23f78e46ca185ffa1cee1a8fd916642a58d
+  - spawn-retry:c40fc23f78e46ca185ffa1cee1a8fd916642a58d
+  - spawn-retry:c40fc23f78e46ca185ffa1cee1a8fd916642a58d
+  - spawn-retry2:c40fc23f78e46ca185ffa1cee1a8fd916642a58d
+  - verify:17454ad29b61c98ade4c189fd391e06ce65920d5
+  - ship:17454ad29b61c98ade4c189fd391e06ce65920d5
