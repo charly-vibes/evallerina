@@ -193,6 +193,26 @@ fn undocumented_feature_audit_row_crosses_threshold_to_dry_run_proposal() {
     assert_eq!(p["bd_issue_id"], serde_json::Value::Null);
 }
 
+#[test]
+fn unfindable_doc_audit_row_crosses_threshold_to_dry_run_proposal() {
+    // Same routing shape for the second doc-coverage code: a token
+    // documented somewhere but unreachable from the breadcrumb
+    // channels is doc-authoring debt in the tool's repo.
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| doc_audit_row("wai", m, "ERR_DOC_NOT_FINDABLE"))
+        .collect();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("doc-audit rows route like any other fault row");
+    assert_eq!(proposals.len(), 1);
+    let p = &proposals[0].to_json();
+    assert_eq!(p["fault_class"], "ERR_DOC_NOT_FINDABLE");
+    assert_eq!(p["token"], "evallerina:doc-audit:ERR_DOC_NOT_FINDABLE");
+    assert_eq!(p["tool"], "wai");
+    assert_eq!(p["repo"], "../wai");
+    assert_eq!(p["decision"], "dry_run");
+}
+
 fn three_models() -> Vec<String> {
     vec!["m/a".into(), "m/b".into(), "m/c".into()]
 }

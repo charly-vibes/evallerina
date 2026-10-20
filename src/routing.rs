@@ -171,7 +171,10 @@ pub fn propose(
                 // tool authoritatively (there is no scenario-definition
                 // recorded tool for the static audit) — and the fault
                 // class is the check code itself.
-                Some(code) if code == crate::doc_audit::ERR_FEATURE_UNDOCUMENTED => {
+                Some(code)
+                    if code == crate::doc_audit::ERR_FEATURE_UNDOCUMENTED
+                        || code == crate::doc_audit::ERR_DOC_NOT_FINDABLE =>
+                {
                     let key = FaultKey {
                         scenario: scenario.to_owned(),
                         fault_class: code.to_owned(),
