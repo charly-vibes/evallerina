@@ -197,6 +197,182 @@ fn first_backtick_token(cell: &str) -> Option<String> {
     Some(token.to_owned())
 }
 
+/// Status of one parity row. `warn` is always named and explicit —
+/// never a silent skip.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RowStatus {
+    Ok,
+    Warn,
+    Fail,
+}
+
+/// One per-tool parity row: the verdict for a managed tool.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParityRow {
+    pub tool: String,
+    pub status: RowStatus,
+    pub detail: String,
+}
+
+/// The full gate result. `degraded = true` means the ddl sibling was
+/// absent and parity was not enforced (standalone clones pass tier-0
+/// with a warning, per design D2).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParityReport {
+    pub degraded: bool,
+    pub rows: Vec<ParityRow>,
+}
+
+impl ParityReport {
+    /// True when any row failed — the caller's exit-code signal.
+    pub fn failed(&self) -> bool {
+        self.rows.iter().any(|r| r.status == RowStatus::Fail)
+    }
+
+    /// Machine-checkable JSON shape (one object per row), so CI output
+    /// is reviewable without reading code.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "degraded": self.degraded,
+            "rows": self.rows.iter().map(|r| serde_json::json!({
+                "tool": r.tool,
+                "status": match r.status {
+                    RowStatus::Ok => "ok",
+                    RowStatus::Warn => "warn",
+                    RowStatus::Fail => "fail",
+                },
+                "detail": r.detail,
+            })).collect::<Vec<_>>(),
+        })
+    }
+}
+
+/// The tier-0 routing-map parity gate. Inputs are injectable so tests
+/// can drive every branch without a real workspace: `ddl_readme` is
+/// the ddl sibling README's content (`None` when the checkout is
+/// absent), `routing_toml` the routing.toml content, `root` the
+/// evallerina repo root for relative-path resolution.
+///
+/// Checks per managed tool (design D2 + spec scenarios):
+/// - no routing.toml entry → FAIL `ERR_ROUTING_PARITY` naming the tool
+///   (`unmapped first-party tool` / `upstream entry missing`),
+/// - third-party identity (canonical table) without `upstream = true`
+///   → FAIL naming the tool,
+/// - `upstream = true` → OK, data only (never path-checked, never
+///   filed — e4x owns filing semantics),
+/// - first-party entry → repo path must resolve from the root, else
+///   FAIL naming the tool and the bad path.
+///
+/// Parse failures (managed block, canonical table, routing.toml) are
+/// always loud errors. The ONLY warning path is the genuinely absent
+/// ddl sibling: the report degrades with an explicit warn row and the
+/// caller exits 0 (anti-goal: never paper over parse failures, never
+/// silently skip tools).
+pub fn routing_parity(
+    ddl_readme: Option<&str>,
+    routing_toml: &str,
+    root: &std::path::Path,
+) -> Result<ParityReport, String> {
+    // Parse routing.toml FIRST — a broken map is a loud error even in
+    // degraded mode (anti-goal: warning degradation never covers a
+    // parse failure).
+    let entries = parse_routing_entries(routing_toml)?;
+
+    let Some(readme) = ddl_readme else {
+        return Ok(ParityReport {
+            degraded: true,
+            rows: vec![ParityRow {
+                tool: "*".to_owned(),
+                status: RowStatus::Warn,
+                detail: format!(
+                    "ddl sibling checkout absent ({}) — routing parity not enforced (standalone clone; CI must check out the sibling)",
+                    DDL_README
+                ),
+            }],
+        });
+    };
+
+    // Source-of-truth parses are loud errors, never degradations.
+    let tools = parse_managed_tools(readme)?;
+    let canonical = parse_canonical_repos(readme)?;
+
+    let mut rows = Vec::new();
+    for tool in tools {
+        let entry = entries.get(&tool);
+        let identity = canonical
+            .get(&tool)
+            .cloned()
+            .unwrap_or_else(|| format!("charly-vibes/{tool}"));
+        let third_party_identity = !identity.starts_with("charly-vibes/");
+
+        let Some(e) = entry else {
+            let kind = if third_party_identity {
+                format!(
+                    "upstream entry missing for '{tool}' (resolves to {identity}) — upstream tools are data-only but must be mapped"
+                )
+            } else {
+                format!(
+                    "unmapped first-party tool '{tool}' (resolves to {identity}) — no routing.toml entry"
+                )
+            };
+            rows.push(ParityRow {
+                tool,
+                status: RowStatus::Fail,
+                detail: format!("ERR_ROUTING_PARITY: {kind}"),
+            });
+            continue;
+        };
+
+        // The explicit upstream flag is the override and wins: bd's
+        // fallback identity would look first-party, but the entry's
+        // flag marks it third-party (design D2). Data only — never
+        // path-checked, never filed (filing semantics: e4x).
+        if e.upstream {
+            rows.push(ParityRow {
+                tool,
+                status: RowStatus::Ok,
+                detail: format!("upstream entry ok (never filed): {identity}"),
+            });
+            continue;
+        }
+        if third_party_identity {
+            rows.push(ParityRow {
+                detail: format!(
+                    "ERR_ROUTING_PARITY: third-party upstream '{tool}' ({identity}) must carry upstream = true"
+                ),
+                tool,
+                status: RowStatus::Fail,
+            });
+            continue;
+        }
+
+        // First-party: the repo path must resolve from the repo root.
+        let resolved = crate::routing::resolve_repo(&e.repo, root);
+        let (status, detail) = if std::path::Path::new(&resolved).exists() {
+            (
+                RowStatus::Ok,
+                format!("repo '{resolved}' resolves (identity: {identity})"),
+            )
+        } else {
+            (
+                RowStatus::Fail,
+                format!(
+                    "ERR_ROUTING_PARITY: repo path '{resolved}' for '{tool}' does not resolve from the repo root"
+                ),
+            )
+        };
+        rows.push(ParityRow {
+            detail,
+            tool,
+            status,
+        });
+    }
+    Ok(ParityReport {
+        degraded: false,
+        rows,
+    })
+}
+
 /// Parse the canonical-names table (header `| binary | crate |
 /// repository |`) from the ddl README into binary name → repository
 /// slug. The table deliberately lists only binary/crate name

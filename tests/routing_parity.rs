@@ -189,3 +189,226 @@ fn explicit_routing_toml_entry_wins_over_both() {
         routing_parity::ResolvedRepo::Override("../my-whisper-worktree".to_owned())
     );
 }
+
+// ---------------------------------------------------------------------------
+// Step 3: the gate — temp routing.toml fixtures; missing entry fails
+// naming the tool, unresolved repo path fails, absent ddl sibling
+// degrades to a warning with exit 0.
+// ---------------------------------------------------------------------------
+
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+/// Serialize per-test sandbox dirs even under `cargo test` parallelism.
+fn fixture_counter() -> u64 {
+    static COUNTER: OnceLock<Mutex<u64>> = OnceLock::new();
+    let mut c = COUNTER.get_or_init(|| Mutex::new(0)).lock().unwrap();
+    *c += 1;
+    *c
+}
+
+/// Fresh unique temp dir, deleted on drop.
+struct Sandbox(PathBuf);
+
+impl Sandbox {
+    fn fresh(tag: &str) -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "evallerina-parity-{}-{}-{}",
+            tag,
+            std::process::id(),
+            fixture_counter(),
+        ));
+        std::fs::create_dir_all(&path).expect("create sandbox");
+        Sandbox(path)
+    }
+}
+
+impl Drop for Sandbox {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A complete routing.toml for the fixture managed set: first-party
+/// siblings exist as dirs inside the sandbox, upstreams carry the flag.
+fn full_fixture_toml() -> String {
+    format!(
+        "[wai]\nrepo = \"{}\"\n\
+         [testaruda]\nrepo = \"{}\"\n\
+         [turu]\nrepo = \"{}\"\n\
+         [bd]\nrepo = \"gastownhall/beads\"\nupstream = true\n\
+         [openspec]\nrepo = \"fission-ai/openspec\"\nupstream = true\n",
+        "wai-sib-wai", "wai-sib-testaruda", "wai-sib-whisper",
+    )
+}
+
+/// Sandbox with the three first-party sibling dirs the fixture toml
+/// points at.
+fn sandbox_with_siblings(tag: &str) -> Sandbox {
+    let sb = Sandbox::fresh(tag);
+    for dir in ["wai-sib-wai", "wai-sib-testaruda", "wai-sib-whisper"] {
+        std::fs::create_dir_all(sb.0.join(dir)).expect("create sibling dir");
+    }
+    sb
+}
+
+fn failing_rows(report: &routing_parity::ParityReport) -> Vec<&routing_parity::ParityRow> {
+    report
+        .rows
+        .iter()
+        .filter(|r| r.status == routing_parity::RowStatus::Fail)
+        .collect()
+}
+
+#[test]
+fn managed_tool_missing_from_routing_toml_fails_naming_it() {
+    let sb = sandbox_with_siblings("missing-entry");
+    // Drop testaruda's entry entirely.
+    let toml = full_fixture_toml().replace("[testaruda]\nrepo = \"wai-sib-testaruda\"\n", "");
+    let report =
+        routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).expect("gate runs");
+    let fails = failing_rows(&report);
+    assert_eq!(fails.len(), 1, "expected exactly one failure: {fails:?}");
+    assert!(fails[0].tool == "testaruda", "got: {:?}", fails[0]);
+    assert!(
+        fails[0].detail.contains("ERR_ROUTING_PARITY"),
+        "got: {:?}",
+        fails[0]
+    );
+    assert!(
+        fails[0].detail.contains("unmapped first-party tool"),
+        "got: {:?}",
+        fails[0]
+    );
+}
+
+#[test]
+fn unmapped_upstream_tool_fails_as_missing_upstream_entry() {
+    let sb = sandbox_with_siblings("missing-upstream");
+    // openspec's third-party-ness is visible in the canonical table
+    // (fission-ai/openspec), so a missing entry is detectable as a
+    // missing upstream entry. (bd's third-party-ness lives only in its
+    // own entry flag, so a missing [bd] fails as an unmapped tool —
+    // still a failure naming bd, which is the drift signal.)
+    let toml = full_fixture_toml().replace(
+        "[openspec]\nrepo = \"fission-ai/openspec\"\nupstream = true\n",
+        "",
+    );
+    let report =
+        routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).expect("gate runs");
+    let fails = failing_rows(&report);
+    assert_eq!(fails.len(), 1, "expected exactly one failure: {fails:?}");
+    assert_eq!(fails[0].tool, "openspec");
+    assert!(
+        fails[0].detail.contains("upstream entry missing"),
+        "got: {:?}",
+        fails[0]
+    );
+}
+
+#[test]
+fn bd_without_entry_still_fails_naming_bd() {
+    // Anti-goal: the gate must not silently skip bd just because its
+    // upstream-ness is only declared in its own entry.
+    let sb = sandbox_with_siblings("missing-bd");
+    let toml =
+        full_fixture_toml().replace("[bd]\nrepo = \"gastownhall/beads\"\nupstream = true\n", "");
+    let report =
+        routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).expect("gate runs");
+    let fails = failing_rows(&report);
+    assert_eq!(fails.len(), 1, "expected exactly one failure: {fails:?}");
+    assert_eq!(fails[0].tool, "bd");
+    assert!(
+        fails[0].detail.contains("ERR_ROUTING_PARITY"),
+        "got: {:?}",
+        fails[0]
+    );
+}
+
+#[test]
+fn unresolved_repo_path_fails_naming_tool_and_path() {
+    let sb = Sandbox::fresh("unresolved");
+    // No sibling dirs exist in this sandbox: every first-party entry is
+    // an unresolved path (spec: Stale repo path detected).
+    let toml = full_fixture_toml();
+    let report =
+        routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).expect("gate runs");
+    let fails = failing_rows(&report);
+    assert_eq!(
+        fails.len(),
+        3,
+        "wai, testaruda, turu all unresolved: {fails:?}"
+    );
+    for f in &fails {
+        assert!(f.detail.contains("ERR_ROUTING_PARITY"), "got: {:?}", f);
+        assert!(f.detail.contains("does not resolve"), "got: {:?}", f);
+    }
+    assert!(
+        fails.iter().any(|f| f.detail.contains("wai-sib-whisper")),
+        "bad path named: {fails:?}"
+    );
+}
+
+#[test]
+fn resolved_paths_pass_with_ok_rows() {
+    let sb = sandbox_with_siblings("resolved");
+    let report = routing_parity::routing_parity(Some(FIXTURE_README), &full_fixture_toml(), &sb.0)
+        .expect("gate runs");
+    assert!(
+        failing_rows(&report).is_empty(),
+        "no failures expected: {report:?}"
+    );
+    assert_eq!(report.rows.len(), 5, "one row per managed tool");
+    let turu = report.rows.iter().find(|r| r.tool == "turu").unwrap();
+    assert_eq!(turu.status, routing_parity::RowStatus::Ok);
+    assert!(
+        turu.detail.contains("charly-vibes/whisper"),
+        "canonical resolution surfaced in the row: {turu:?}"
+    );
+}
+
+#[test]
+fn absent_ddl_sibling_degrades_to_warning_exit_ok() {
+    let sb = sandbox_with_siblings("no-sibling");
+    // ddl_readme = None: standalone clone. The gate degrades to a
+    // warning row, nothing fails.
+    let report =
+        routing_parity::routing_parity(None, &full_fixture_toml(), &sb.0).expect("gate runs");
+    assert!(report.degraded);
+    assert!(failing_rows(&report).is_empty());
+    assert_eq!(report.rows[0].status, routing_parity::RowStatus::Warn);
+    assert!(
+        report.rows[0].detail.contains("dulce-de-leche"),
+        "warning names the absent sibling: {:?}",
+        report.rows[0]
+    );
+}
+
+#[test]
+fn routing_toml_parse_failure_is_loud_even_when_sibling_absent() {
+    // Anti-goal: warning degradation is ONLY for the absent sibling —
+    // never a cover for a broken routing.toml.
+    let sb = sandbox_with_siblings("bad-toml");
+    let err = routing_parity::routing_parity(None, "not [ valid toml", &sb.0).unwrap_err();
+    assert!(err.contains("routing.toml parse error"), "got: {err}");
+}
+
+#[test]
+fn managed_block_parse_failure_is_loud_never_a_warning() {
+    // Anti-goal: the gate must never paper over a parse failure by
+    // degrading — only the genuinely-absent sibling may warn.
+    let sb = sandbox_with_siblings("bad-block");
+    let broken_readme = FIXTURE_README.replace("<!-- MANAGED-TOOLS:START -->\n", "");
+    let err = routing_parity::routing_parity(Some(&broken_readme), &full_fixture_toml(), &sb.0)
+        .unwrap_err();
+    assert!(err.contains("MANAGED-TOOLS:START"), "got: {err}");
+}
+
+#[test]
+fn broken_routing_entry_is_a_loud_error() {
+    let sb = sandbox_with_siblings("bad-entry");
+    let toml =
+        full_fixture_toml().replace("[wai]\nrepo = \"wai-sib-wai\"", "[wai]\nupstream = true");
+    let err = routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).unwrap_err();
+    assert!(err.contains("[wai] lacks a `repo` string"), "got: {err}");
+}
