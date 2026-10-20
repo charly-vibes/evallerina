@@ -84,3 +84,27 @@ fn surface_extraction_harvests_subcommands_flags_and_exit_codes() {
         doc_audit::canonical("teardown")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Step 2: `surface = "none"` tools skip the binary probe, loudly —
+// the tool is recorded in provenance, never silently skipped
+// (anti-goal, pinned by test).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn surface_none_skips_binary_probe_with_provenance() {
+    // The binary path does not exist: if the extractor probed it, the
+    // run would fail loudly — proving `surface = "none"` performs no
+    // binary step at all.
+    let provenance = doc_audit::audit_tool_surface(&doc_audit::ToolConfig {
+        tool: "openspec".into(),
+        repo: "fission-ai/openspec".into(),
+        binary: None,
+        surface_none: true,
+    })
+    .expect("surface-none tool is recorded, not an error");
+    assert_eq!(provenance.status, "skip");
+    assert!(provenance.detail.contains("surface"));
+    // No binary probe happened, so there is no token set either.
+    assert!(provenance.tokens.is_empty());
+}

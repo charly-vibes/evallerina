@@ -21,6 +21,61 @@
 use std::collections::BTreeSet;
 use std::process::Command;
 
+/// Per-tool audit configuration, parsed from the checked-in
+/// `doc_audit.toml` (`[tool]` sections, same shape as routing.toml).
+/// `surface_none` marks non-Rust-CLI tools (e.g. `bd`, `openspec`):
+/// they skip the binary probe and are recorded in provenance, never
+/// silently skipped.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolConfig {
+    pub tool: String,
+    pub repo: String,
+    pub binary: Option<String>,
+    pub surface_none: bool,
+}
+
+/// Provenance for one tool's audit run: the loud record of what the
+/// audit actually did. `extracted` carries the harvested token set;
+/// `skip` (surface none), `binary_absent`, and `repo_absent` are
+/// explicit non-extractions — never silent (anti-goal, pinned by test).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Provenance {
+    pub tool: String,
+    pub status: String,
+    pub detail: String,
+    pub tokens: BTreeSet<String>,
+}
+
+/// Run the surface step for one configured tool: either record the
+/// `skip` provenance (`surface = "none"`), or probe the binary and
+/// harvest its token set. A missing binary is `binary_absent` provenance
+/// — loud, not an error and not a silent skip.
+pub fn audit_tool_surface(config: &ToolConfig) -> Result<Provenance, String> {
+    if config.surface_none {
+        return Ok(Provenance {
+            tool: config.tool.clone(),
+            status: "skip".to_owned(),
+            detail: "surface = none: not a --help-probeable CLI surface".to_owned(),
+            tokens: BTreeSet::new(),
+        });
+    }
+    let binary = config.binary.as_deref().unwrap_or(&config.tool).to_owned();
+    match extract_surface(&binary) {
+        Ok(tokens) => Ok(Provenance {
+            tool: config.tool.clone(),
+            status: "extracted".to_owned(),
+            detail: format!("{binary} --help"),
+            tokens,
+        }),
+        Err(_) => Ok(Provenance {
+            tool: config.tool.clone(),
+            status: "binary_absent".to_owned(),
+            detail: format!("binary '{binary}' not runnable — audit cannot probe its surface"),
+            tokens: BTreeSet::new(),
+        }),
+    }
+}
+
 /// Canonical form of a feature token: lowercase, alphanumeric
 /// characters only. `--dry-run`, `dry_run`, `Dry Run`, and `dryrun` all
 /// canonicalize to `dryrun` — one feature, one token (design D1).
@@ -83,8 +138,10 @@ fn harvest_tokens(help: &str) -> BTreeSet<String> {
         if in_commands {
             if trimmed.is_empty() || !line.starts_with(char::is_whitespace) {
                 in_commands = false;
-            } else if let Some(name) =
-                trimmed.split_whitespace().next().filter(|n| n.chars().any(|c| c.is_ascii_alphanumeric()))
+            } else if let Some(name) = trimmed
+                .split_whitespace()
+                .next()
+                .filter(|n| n.chars().any(|c| c.is_ascii_alphanumeric()))
             {
                 tokens.insert(canonical_raw(name));
             }
