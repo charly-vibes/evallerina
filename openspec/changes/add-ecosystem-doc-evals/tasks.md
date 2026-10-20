@@ -8,10 +8,12 @@
   parse sibling ddl README managed block, diff against routing.toml entries,
   unresolved paths fail, absent sibling → warning
 - [ ] 1.3 Wire into tier-0 (`just tier0` / main.rs subcommand) and add
-  `ERR_ROUTING_PARITY` reporting
+  `ERR_ROUTING_PARITY` reporting; GHA workflows check out the ddl sibling so
+  the gate enforces in CI (warning-only in local standalone clones)
 - [ ] 1.4 Expand routing.toml: testaruda, turu(whisper), ah(espectacular
-  exists), pretender, vampiro, incitaciones, openspec, specodelic,
-  funkalization, wild, dulce-de-leche; verify parity check green
+  exists), pretender, vampiro, incitaciones, openspec (`upstream = true`),
+  specodelic, funkalization, wild, dulce-de-leche, bd (`upstream = true`);
+  verify parity check green
 
 ## 2. Tier-0 doc-coverage audit
 
@@ -46,7 +48,8 @@
 ## 5. Edge-exploration scenarios (first tools)
 
 - [ ] 5.1 Failing test: classifier — non-zero exit without hints on
-  undocumented input → ERR_EDGE_UNHANDLED; hint ignored → ERR_HINT_BLINDNESS
+  undocumented input → ERR_EDGE_UNHANDLED; hint ignored →
+  ERR_ENVELOPE_HINT_BLINDNESS (existing class)
 - [ ] 5.2 Fixtures + recordings for wai and dont edge inputs (existing battery
   tools first — cheapest provenance)
 - [ ] 5.3 Extend to turu/testaruda/ah recordings as they land
@@ -54,7 +57,10 @@
 ## 6. Validation
 
 - [ ] 6.1 `just tier0` green; routing-parity + doc-coverage gates pass on this
-  repo itself (dogfood: evallerina audits its own docs)
-- [ ] 6.2 `just tier1` replay unchanged for existing scenarios
-- [ ] 6.3 One full nightly rotation green with new families; dry-run
+  repo itself
+- [ ] 6.2 Dogfood first: run the doc-coverage audit against evallerina's own
+  surfaces (README, docs/, AGENTS.md) before any tool-fixture rollout —
+  fastest way to shake out the extractor
+- [ ] 6.3 `just tier1` replay unchanged for existing scenarios
+- [ ] 6.4 One full nightly rotation green with new families; dry-run
   proposals reviewed; `--file` remains opt-in

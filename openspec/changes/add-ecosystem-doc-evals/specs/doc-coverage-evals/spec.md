@@ -56,8 +56,9 @@ feature present in docs but not referenced (directly or via breadcrumb) by
 
 The harness SHALL maintain `routing.toml` entries for every tool listed in
 dulce-de-leche's MANAGED-TOOLS block plus `ddl`, `genesis`, and
-`espectacular`, enforced by a tier-0 `routing-parity` check. When the ddl
-sibling checkout is absent, the check SHALL degrade to a warning.
+`espectacular`, enforced by a tier-0 `routing-parity` check. Third-party
+upstream entries SHALL be marked `upstream = true` and excluded from filing.
+When the ddl sibling checkout is absent, the check SHALL degrade to a warning.
 
 #### Scenario: Managed tool missing from routing.toml
 
@@ -70,13 +71,42 @@ sibling checkout is absent, the check SHALL degrade to a warning.
 - **WHEN** a routing.toml repo path does not resolve from the repo root
 - **THEN** the routing-parity check fails naming the tool and the bad path
 
+### Requirement: Repo resolution fallback
+
+Tool → repo resolution for parity entries SHALL use ddl's canonical-names
+table when the tool is listed there, falling back to `repo == binary name`
+otherwise, overridable by an explicit routing.toml entry.
+
+#### Scenario: Name-mismatch tool resolved from canonical table
+
+- **WHEN** the parity check resolves a tool listed in ddl's canonical-names
+  table (e.g. `turu` → `charly-vibes/whisper`)
+- **THEN** the resolved repo is the table's repository column, not the binary
+  name
+
+#### Scenario: Unlisted tool falls back to binary name
+
+- **WHEN** the parity check resolves a first-party tool absent from the
+  canonical-names table (e.g. `testaruda`)
+- **THEN** the resolved repo is the binary name, unless routing.toml carries
+  an explicit override
+
+#### Scenario: Third-party upstream never filed
+
+- **WHEN** a routed proposal targets an `upstream = true` tool (e.g. `bd`,
+  `openspec`) and the operator runs with `--file`
+- **THEN** the decision is `skipped` with reason `unmapped_upstream`; no
+  ticket is created in the third-party repository
+
 ### Requirement: Doc-findability eval family
 
 The harness SHALL support `doc-findability` scenarios scored on process
 boundaries only: within a bounded step budget the transcript references the
 seeded feature's doc path (located via llms.txt breadcrumbs or AGENTS.md
 managed blocks) and a subsequent command succeeds against the documented
-interface.
+interface. Scenario failures SHALL attribute `ERR_DOC_NOT_FINDABLE` to the
+faulting tool's repository (doc-authoring fault), never to the genesis
+channel work.
 
 #### Scenario: Agent finds feature via breadcrumb
 
@@ -90,15 +120,16 @@ interface.
 
 - **WHEN** the transcript exhausts the step budget without referencing the
   correct doc path
-- **THEN** the scenario scores fail with fault class
-  `ERR_DOC_NOT_FINDABLE` attributed per the cross-model threshold (agent fault
-  → genesis channel work; tool fault → tool repo ticket proposal)
+- **THEN** the scenario scores fail with fault class `ERR_DOC_NOT_FINDABLE`
+  routed (per the cross-model threshold) to a ticket proposal in the tool's
+  mapped repository
 
 ### Requirement: Edge-exploration eval family
 
 The harness SHALL support `edge-exploration` scenarios asserting only on
 envelope channels, with faults classified exactly per the existing taxonomy:
-`ERR_EDGE_UNHANDLED` is a tool fault, `ERR_HINT_BLINDNESS` an agent fault.
+`ERR_EDGE_UNHANDLED` is a tool fault; a hint the agent ignores reuses the
+existing `ERR_ENVELOPE_HINT_BLINDNESS` class as an agent fault.
 
 #### Scenario: Undocumented input fails blind
 
@@ -111,8 +142,8 @@ envelope channels, with faults classified exactly per the existing taxonomy:
 
 - **WHEN** the tool emits a `hints` entry for the failing input and the agent
   repeats the identical failing command
-- **THEN** the row classifies `ERR_HINT_BLINDNESS` and does not propose a tool
-  ticket
+- **THEN** the row classifies `ERR_ENVELOPE_HINT_BLINDNESS` and does not
+  propose a tool ticket
 
 ### Requirement: Fault routing reuses existing machinery
 

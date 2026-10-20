@@ -5,9 +5,9 @@
 The battery currently exercises only **wai and dont**: 5 recorded scenarios plus
 2 archetype recordings, and `routing.toml` maps only 4 repositories. The
 dulce-de-leche suite manages **13 tools** (`ddl`'s MANAGED-TOOLS block is the
-source of truth) — 10 of them, plus `ddl` itself, have zero scenario coverage
-and zero ticket-routing targets. Tool faults found in those tools today cannot
-route anywhere.
+source of truth) — 11 of them (all but wai and dont), plus `ddl` itself, have
+zero scenario coverage and zero ticket-routing targets. Tool faults found in
+those tools today cannot route anywhere.
 
 There is also no eval family that measures **the documentation as the product**:
 
@@ -43,13 +43,16 @@ instead of by hand.
   - `edge-exploration` (tier-2): scenarios drive fixtures through documented
     boundary conditions *and* undocumented edge inputs; scoring asserts on the
     envelope's `hints` channel. Unknown-edge failures classify
-    `ERR_EDGE_UNHANDLED` (tool fault) vs `ERR_HINT_BLINDNESS` (agent fault)
+    `ERR_EDGE_UNHANDLED` (tool fault) vs `ERR_ENVELOPE_HINT_BLINDNESS` (agent
+    fault)
     exactly like the existing taxonomy.
 - **Ecosystem-wide routing map**: `routing.toml` gains an entry for every tool
   in ddl's MANAGED-TOOLS block (+ `ddl` itself, `genesis`, `espectacular`).
-  A tier-0 drift check fails when routing.toml and the MANAGED-TOOLS block
-  disagree (reuse of the registry-drift idea from ddl's
-  `tests/tool_registry_drift.rs`).
+  Third-party upstreams (`bd`, `openspec`) are marked `upstream = true`:
+  parity requires their entry but the filing path never raises tickets in
+  repos we don't control. A tier-0 drift check fails when routing.toml and
+  the MANAGED-TOOLS block disagree (reuse of the registry-drift idea from
+  ddl's `tests/tool_registry_drift.rs`).
 - **Scenario recordings for the uncovered tools** start with the recommended
   tier (`turu`, `testaruda`, `ah`) before extension-tier tools, recorded live
   once fixtures land, then replayed per the tier ladder.
@@ -60,6 +63,9 @@ instead of by hand.
   routing behaviour reused unchanged from add-fault-ticket-routing.
 - **Report**: new fault classes appear as new `check-code` rows; matrix shape
   unchanged, `report_version` stays 1 (additive).
+- **Fixture maintenance**: each additional tool adds a fixture (binaries,
+  doc surfaces, recordings); recordings target only tools with a reproducible
+  offline install path (see design Risks).
 - **Non-goals**: no single doc-quality KPI score (anti-goal: per-capability
   breakdowns only); no scraping of upstream `fission-ai/openspec` docs beyond
   what ships in-repo; no automatic filing without the existing explicit

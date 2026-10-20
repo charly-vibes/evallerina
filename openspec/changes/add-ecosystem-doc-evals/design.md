@@ -38,19 +38,25 @@ from llms.txt/managed-block breadcrumbs are `ERR_DOC_NOT_FINDABLE` rows.
 ddl's MANAGED-TOOLS block is the ecosystem source of truth (already enforced
 inside ddl by `tests/tool_registry_drift.rs`). evallerina mirrors it: tier-0
 check `routing-parity` parses the ddl repo checkout available in the workspace
-sibling (`../dulce-de-leche/README.md` managed block), extracts tool → repo
-mappings from its canonical-names table, and fails when routing.toml lacks an
-entry or points at a stale path. Manual overrides stay possible via explicit
-routing.toml entries (genesis and espectacular are not ddl-managed but remain
-routing targets).
+sibling (`../dulce-de-leche/README.md` managed block) for the **tool list**, and
+resolves each tool's repo from the canonical-names table when listed; tools not
+in that table (the table deliberately lists only binary/crate name mismatches)
+falls back to `repo == binary name`, overridable by an explicit routing.toml
+entry. The check fails when a first-party tool lacks an entry or its repo path
+does not resolve. **Third-party upstreams** (`bd` → gastownhall/beads,
+`openspec` → fission-ai/openspec) get entries marked `upstream = true`: parity
+requires the entry, but the filing path emits `skipped`/`unmapped_upstream` —
+we never raise tickets in repos we don't control. genesis and espectacular are
+not ddl-managed but remain first-party routing targets via explicit entries.
 
 ### D3: Edge-exploration faults reuse the existing taxonomy verbatim
 
 `ERR_EDGE_UNHANDLED` = the tool exited non-zero with no `hints` entry on an
 input the docs never document → tool fault → routes to the tool repo.
-`ERR_HINT_BLINDNESS` = the tool emitted a hint and the agent ignored/replayed
-the same failing command → agent fault → routes to AIX channel work in genesis
-(existing cross-model threshold decides). No new routing semantics.
+`ERR_ENVELOPE_HINT_BLINDNESS` (the existing class — no new name is minted) =
+the tool emitted a hint and the agent ignored/replayed the same failing command
+→ agent fault → routes to AIX channel work in genesis (existing cross-model
+threshold decides). No new routing semantics.
 
 ### D4: Fixture provisioning follows genesis evals-guidelines
 
@@ -73,10 +79,16 @@ battery in the same commit (no orphan recordings).
   audit rows are warnings-level findings that become faults only via the
   cross-model threshold, same as every other family; a noisy parser shows up
   in dry-run review before it can file anything.
+- **Absent binaries in CI** → an audit row whose tool binary cannot be
+  provisioned offline records `binary_absent` explicitly in provenance —
+  never a silent skip (project anti-goal: absent cells must be explicit).
+  Recordings target only tools with a reproducible offline install path
+  (cargo install from lockfile or prebuilt release asset).
 - **Sibling-repo dependency (D2)** assumes the ddl checkout sits next to
   evallerina in the workspace — true for this workspace; the gate degrades to
   a warning (not a failure) when the sibling is absent so standalone clones
-  still pass tier-0.
+  still pass tier-0. GHA workflows MUST check out the ddl sibling (second
+  `actions/checkout` step) so the gate actually enforces in CI.
 - **OpenSpec/mixed-ecosystem tools** (openspec, bd are not Rust CLIs) → the
   audit's binary surface step is skipped for tools whose fixture declares
   `surface: none`; their coverage rows come from the docs inventory only.
@@ -92,6 +104,6 @@ battery in the same commit (no orphan recordings).
 
 ## Open Questions
 
-- Should `ERR_DOC_NOT_FINDABLE` route to the tool repo (doc authoring fault)
-  or genesis (llms.txt channel fault)? Default: tool repo, since channel
-  plumbing faults already have `ERR_ENVELOPE_HINT_BLINDNESS`.
+None. `ERR_DOC_NOT_FINDABLE` routes to the tool repo (doc-authoring fault):
+channel plumbing faults already have `ERR_ENVELOPE_HINT_BLINDNESS` in genesis,
+and a feature missing from breadcrumb channels is the tool's doc debt.
