@@ -1,0 +1,7 @@
+ticket: evallerina-0sy
+branch: main
+brief_path:
+steps: []
+  - claim:c7e72608ccc3c40c5576c6b9d648c92412ff1ac1
+  - gates:c7e72608ccc3c40c5576c6b9d648c92412ff1ac1
+brief_path: .wai/projects/evallerina/briefs/evallerina-0sy.md
