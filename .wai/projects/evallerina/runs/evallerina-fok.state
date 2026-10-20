@@ -1,0 +1,6 @@
+ticket: evallerina-fok
+branch: main
+brief_path: .wai/projects/evallerina/briefs/evallerina-fok.md
+steps: []
+  - claim:e6ed26df80367fb73afa35250b6ac27b4a75e890
+  - gates:e6ed26df80367fb73afa35250b6ac27b4a75e890
