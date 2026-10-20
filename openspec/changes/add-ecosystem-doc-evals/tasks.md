@@ -17,16 +17,16 @@
 
 ## 2. Tier-0 doc-coverage audit
 
-- [ ] 2.1 Failing test: surface extraction — fixture binary `--help` with
+- [x] 2.1 Failing test: surface extraction — fixture binary `--help` with
   subcommands/flags → token set (kebab/snake/spacing normalization)
-- [ ] 2.2 Implement surface extractor (`src/doc_audit.rs`: Purpose header per
+- [x] 2.2 Implement surface extractor (`src/doc_audit.rs`: Purpose header per
   e10 Must gate); `surface: none` fixtures skip cleanly
-- [ ] 2.3 Failing test: inventory extraction — fixture repo with README +
+- [x] 2.3 Failing test: inventory extraction — fixture repo with README +
   docs/ + llms.txt + AGENTS.md managed block → feature-token set per surface
-- [ ] 2.4 Implement inventory scanner; breadcrumb-reachability check
+- [x] 2.4 Implement inventory scanner; breadcrumb-reachability check
   (llms.txt / managed blocks) distinguishing ERR_FEATURE_UNDOCUMENTED vs
   ERR_DOC_NOT_FINDABLE
-- [ ] 2.5 Wire audit rows into report as new check-codes (report_version
+- [x] 2.5 Wire audit rows into report as new check-codes (report_version
   stays 1, additive); `just tier0` green
 
 ## 3. Routing integration for audit faults
