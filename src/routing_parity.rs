@@ -331,7 +331,7 @@ pub fn routing_parity(
             rows.push(ParityRow {
                 tool,
                 status: RowStatus::Ok,
-                detail: format!("upstream entry ok (never filed): {identity}"),
+                detail: format!("upstream entry ok (never filed): {}", e.repo),
             });
             continue;
         }

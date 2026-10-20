@@ -412,3 +412,69 @@ fn broken_routing_entry_is_a_loud_error() {
     let err = routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).unwrap_err();
     assert!(err.contains("[wai] lacks a `repo` string"), "got: {err}");
 }
+
+// ---------------------------------------------------------------------------
+// Step 4: the upstream policy — bd/openspec resolve and carry
+// `upstream = true`; the flag is the explicit override that wins over
+// bd's first-party-looking fallback identity. Data only: no path
+// check, no filing (e4x owns filing semantics).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bd_resolves_and_carries_upstream_true() {
+    let sb = sandbox_with_siblings("bd-upstream");
+    // bd is NOT in the canonical table; its fallback identity would
+    // look first-party (charly-vibes/bd), but the explicit
+    // `upstream = true` flag wins.
+    let report = routing_parity::routing_parity(Some(FIXTURE_README), &full_fixture_toml(), &sb.0)
+        .expect("gate runs");
+    let bd = report.rows.iter().find(|r| r.tool == "bd").unwrap();
+    assert_eq!(bd.status, routing_parity::RowStatus::Ok, "{bd:?}");
+    assert!(bd.detail.contains("upstream"), "{bd:?}");
+    assert!(bd.detail.contains("gastownhall/beads"), "{bd:?}");
+}
+
+#[test]
+fn openspec_resolves_and_carries_upstream_true() {
+    let sb = sandbox_with_siblings("openspec-upstream");
+    let report = routing_parity::routing_parity(Some(FIXTURE_README), &full_fixture_toml(), &sb.0)
+        .expect("gate runs");
+    let row = report.rows.iter().find(|r| r.tool == "openspec").unwrap();
+    assert_eq!(row.status, routing_parity::RowStatus::Ok, "{row:?}");
+    assert!(row.detail.contains("fission-ai/openspec"), "{row:?}");
+}
+
+#[test]
+fn third_party_identity_without_upstream_flag_fails() {
+    let sb = sandbox_with_siblings("openspec-no-flag");
+    let toml = full_fixture_toml().replace(
+        "[openspec]\nrepo = \"fission-ai/openspec\"\nupstream = true",
+        "[openspec]\nrepo = \"fission-ai/openspec\"",
+    );
+    let report =
+        routing_parity::routing_parity(Some(FIXTURE_README), &toml, &sb.0).expect("gate runs");
+    let fails = failing_rows(&report);
+    assert_eq!(fails.len(), 1, "{fails:?}");
+    assert_eq!(fails[0].tool, "openspec");
+    assert!(
+        fails[0].detail.contains("must carry upstream = true"),
+        "{:?}",
+        fails[0]
+    );
+}
+
+#[test]
+fn upstream_entries_are_never_path_checked() {
+    // Data-only: bd's `repo` value is a slug, not a local checkout —
+    // the gate must not require it to exist (upstream repos are never
+    // filed in, so there is nothing to resolve).
+    let sb = Sandbox::fresh("upstream-no-path");
+    // No sibling dirs at all: bd/openspec still come out OK, only the
+    // first-party entries fail on unresolved paths.
+    let report = routing_parity::routing_parity(Some(FIXTURE_README), &full_fixture_toml(), &sb.0)
+        .expect("gate runs");
+    for tool in ["bd", "openspec"] {
+        let row = report.rows.iter().find(|r| r.tool == tool).unwrap();
+        assert_eq!(row.status, routing_parity::RowStatus::Ok, "{row:?}");
+    }
+}
