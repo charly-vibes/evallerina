@@ -230,3 +230,51 @@ fn reachability_distinguishes_not_findable_from_undocumented() {
     assert_eq!(hidden.code, "ERR_FEATURE_UNDOCUMENTED");
     assert_eq!(rows.len(), 2, "exactly the two drift rows: {rows:?}");
 }
+
+// ---------------------------------------------------------------------------
+// Step 5: a configured binary that is missing → `binary_absent`
+// provenance: loud, not a silent skip (anti-goal, pinned by test).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn binary_absent_records_loud_provenance() {
+    let dir = fresh_dir("binary-absent");
+    let missing = dir.join("no-such-binary");
+    let config = doc_audit::ToolConfig {
+        tool: "pretender".into(),
+        repo: "../pretender".into(),
+        binary: Some(missing.to_string_lossy().into_owned()),
+        surface_none: false,
+    };
+    let provenance = doc_audit::audit_tool_surface(&config)
+        .expect("absent binary is provenance, not a loud error");
+    assert_eq!(provenance.status, "binary_absent");
+    assert!(
+        provenance
+            .detail
+            .contains(&missing.to_string_lossy().to_string()),
+        "provenance names the missing binary: {provenance:?}"
+    );
+    assert!(provenance.tokens.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Dogfood (hermetic slice): scanning evallerina's own surfaces yields a
+// non-empty inventory — the extractor shakes out on this repo itself.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn dogfood_inventory_of_evallerina_surfaces_is_non_empty() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let inv = doc_audit::scan_inventory(&root).expect("scan evallerina itself");
+    let readme = inv.surfaces.get("README.md").expect("README surface");
+    assert!(
+        !readme.is_empty(),
+        "evallerina README inventory is non-empty"
+    );
+    assert!(
+        inv.surfaces.keys().any(|k| k.starts_with("docs/")),
+        "docs/ surfaces scanned: {:?}",
+        inv.surfaces.keys().collect::<Vec<_>>()
+    );
+}
