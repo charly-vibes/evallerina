@@ -108,3 +108,68 @@ fn surface_none_skips_binary_probe_with_provenance() {
     // No binary probe happened, so there is no token set either.
     assert!(provenance.tokens.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Step 3: inventory scanning — fixture repo (README + docs/x.md +
+// llms.txt + AGENTS.md managed block) into per-surface token sets
+// ---------------------------------------------------------------------------
+
+#[test]
+fn inventory_scanner_separates_surfaces_and_breadcrumbs() {
+    let dir = fresh_dir("inventory");
+    fs::write(
+        dir.join("README.md"),
+        "# fakecli\n\nRun `deploy` to push. Use `--dry-run` first.\n",
+    )
+    .expect("write README");
+    fs::create_dir_all(dir.join("docs")).expect("mkdir docs");
+    fs::write(
+        dir.join("docs/x.md"),
+        "# Reference\n\nThe `tear-down` command removes everything.\n",
+    )
+    .expect("write docs/x.md");
+    fs::write(
+        dir.join("llms.txt"),
+        "fakecli quickstart: deploy, tear-down, --dry-run\n",
+    )
+    .expect("write llms.txt");
+    fs::write(
+        dir.join("AGENTS.md"),
+        "<!-- WAI:START -->\nmanaged guidance: use `--output_dir` for results\n<!-- WAI:END -->\n",
+    )
+    .expect("write AGENTS.md");
+
+    let inv = doc_audit::scan_inventory(&dir).expect("inventory scan succeeds");
+
+    let readme = inv
+        .surfaces
+        .get("README.md")
+        .expect("README surface present");
+    assert!(readme.contains("deploy"), "README tokens: {readme:?}");
+    assert!(readme.contains("dryrun"), "README tokens: {readme:?}");
+
+    let docs = inv
+        .surfaces
+        .get("docs/x.md")
+        .expect("docs/x.md surface present");
+    assert!(docs.contains("teardown"), "docs tokens: {docs:?}");
+
+    // Breadcrumb sources: llms.txt + AGENTS.md managed blocks.
+    assert!(inv.breadcrumbs.contains("deploy"));
+    assert!(inv.breadcrumbs.contains("outputdir"));
+    // Non-breadcrumb content must not leak into the breadcrumb set:
+    // docs/x.md content is a surface, not a breadcrumb source.
+    let managed_only = inv
+        .surfaces
+        .get("AGENTS.md")
+        .expect("AGENTS.md surface present");
+    assert!(
+        managed_only.contains("outputdir"),
+        "AGENTS tokens: {managed_only:?}"
+    );
+    let llms = inv
+        .surfaces
+        .get("llms.txt")
+        .expect("llms.txt surface present");
+    assert!(llms.contains("dryrun"), "llms.txt tokens: {llms:?}");
+}
