@@ -18,4 +18,5 @@ pub mod recorded;
 pub mod registry;
 pub mod report;
 pub mod routing;
+pub mod routing_parity;
 pub mod scenario;
