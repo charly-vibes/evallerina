@@ -83,10 +83,10 @@ fn harvest_tokens(help: &str) -> BTreeSet<String> {
         if in_commands {
             if trimmed.is_empty() || !line.starts_with(char::is_whitespace) {
                 in_commands = false;
-            } else if let Some(name) = trimmed.split_whitespace().next() {
-                if name.chars().any(|c| c.is_ascii_alphanumeric()) {
-                    tokens.insert(canonical_raw(name));
-                }
+            } else if let Some(name) =
+                trimmed.split_whitespace().next().filter(|n| n.chars().any(|c| c.is_ascii_alphanumeric()))
+            {
+                tokens.insert(canonical_raw(name));
             }
             continue;
         }
@@ -114,14 +114,13 @@ fn harvest_tokens(help: &str) -> BTreeSet<String> {
             .or_else(|| lower.find("exit status"))
         {
             let after = &trimmed[idx + "exit code".len()..];
-            if let Some(first) = after
+            if let Some(code) = after
                 .trim_start_matches(|c: char| !c.is_ascii_digit())
                 .split(|c: char| !c.is_ascii_digit())
                 .next()
+                .and_then(|first| first.parse::<u32>().ok())
             {
-                if let Ok(code) = first.parse::<u32>() {
-                    tokens.insert(format!("exit{code}"));
-                }
+                tokens.insert(format!("exit{code}"));
             }
         }
     }
@@ -132,9 +131,7 @@ fn harvest_tokens(help: &str) -> BTreeSet<String> {
 /// (`  0  success` → `exit0`); description words are not tokens.
 fn harvest_exit_words(line: &str, tokens: &mut BTreeSet<String>) {
     let digits: String = line.chars().take_while(|c| c.is_ascii_digit()).collect();
-    if !digits.is_empty() {
-        if let Ok(code) = digits.parse::<u32>() {
-            tokens.insert(format!("exit{code}"));
-        }
+    if let Ok(code) = digits.parse::<u32>() {
+        tokens.insert(format!("exit{code}"));
     }
 }
