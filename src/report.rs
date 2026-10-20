@@ -61,7 +61,7 @@ pub fn attach_routing(
     dashboard: &mut serde_json::Value,
     rows: &[serde_json::Value],
     configured_models: &[String],
-    repo_map: &BTreeMap<String, String>,
+    repo_map: &BTreeMap<String, crate::routing_parity::RoutingEntry>,
     file_authorized: bool,
     run_bd: &mut crate::routing::BdRunner,
 ) -> Result<Vec<crate::routing::ProposalRow>, String> {
@@ -103,7 +103,7 @@ pub fn run_routing_step(
 ) -> Result<Vec<crate::routing::ProposalRow>, String> {
     let content = std::fs::read_to_string("routing.toml")
         .map_err(|e| format!("cannot read routing.toml: {e}"))?;
-    let repo_map = crate::routing::parse_routing_toml(&content)?;
+    let repo_map = crate::routing_parity::parse_routing_entries(&content)?;
     let proposals = attach_routing(
         dashboard,
         rows,

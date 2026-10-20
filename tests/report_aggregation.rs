@@ -450,7 +450,15 @@ fn route_dry_run_attaches_routed_summary_additively() {
         .collect::<Vec<_>>();
     let configured = models(3);
     let mut dashboard = aggregate_rows(&rows, &configured, &test_channel_of).expect("aggregates");
-    let repo_map = [("wai".to_owned(), "../wai".to_owned())].into();
+    let repo_map: std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> =
+        [(
+            "wai".to_owned(),
+            evallerina::routing_parity::RoutingEntry {
+                repo: "../wai".to_owned(),
+                upstream: false,
+            },
+        )]
+        .into();
     let mut runner =
         |_: &std::path::Path, _: &[&str]| panic!("dry-run routing must never invoke bd");
     let proposals = evallerina::report::attach_routing(
@@ -614,7 +622,8 @@ fn unmapped_tool_counts_skipped_and_report_succeeds() {
         .collect::<Vec<_>>();
     let configured = models(3);
     let mut dashboard = aggregate_rows(&rows, &configured, &test_channel_of).expect("aggregates");
-    let empty_map: std::collections::BTreeMap<String, String> = [].into();
+    let empty_map: std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> =
+        [].into();
     let mut runner =
         |_: &std::path::Path, _: &[&str]| panic!("dry-run routing must never invoke bd");
     let proposals = evallerina::report::attach_routing(
@@ -647,7 +656,15 @@ fn absent_rows_never_routed() {
     })];
     let configured = models(3);
     let mut dashboard = aggregate_rows(&rows, &configured, &test_channel_of).expect("aggregates");
-    let repo_map = [("wai".to_owned(), "../wai".to_owned())].into();
+    let repo_map: std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> =
+        [(
+            "wai".to_owned(),
+            evallerina::routing_parity::RoutingEntry {
+                repo: "../wai".to_owned(),
+                upstream: false,
+            },
+        )]
+        .into();
     let mut runner =
         |_: &std::path::Path, _: &[&str]| panic!("dry-run routing must never invoke bd");
     let proposals = evallerina::report::attach_routing(

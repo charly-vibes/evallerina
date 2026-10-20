@@ -99,14 +99,17 @@ impl ProposalRow {
 /// empty is a loud error, no routing threshold exists. `scenario_tool_of`
 /// resolves a scenario to the tool its *definition* recorded (proposals
 /// key the repo on this, never on the row's tool field); an unknown
-/// scenario is a loud error. `repo_map` maps tool name → repo path (the
-/// parsed routing.toml); a mapped-but-unregistered tool surfaces as
-/// `skipped`/`unmapped_tool`, never a silent drop.
+/// scenario is a loud error. `repo_map` maps tool name → routing target
+/// (the parsed routing.toml via
+/// [`crate::routing_parity::parse_routing_entries`], including the
+/// `upstream` flag); a mapped-but-unregistered tool surfaces as
+/// `skipped`/`unmapped_tool`, an `upstream = true` tool as
+/// `skipped`/`unmapped_upstream` — never a silent drop.
 pub fn propose(
     rows: &[serde_json::Value],
     configured_models: &[String],
     scenario_tool_of: &dyn Fn(&str) -> Option<String>,
-    repo_map: &BTreeMap<String, String>,
+    repo_map: &BTreeMap<String, crate::routing_parity::RoutingEntry>,
 ) -> Result<Vec<ProposalRow>, String> {
     if configured_models.is_empty() {
         return Err("configured model registry is empty — no routing threshold exists".into());
@@ -219,10 +222,18 @@ pub fn propose(
         .into_iter()
         .filter(|(_, tally)| tally.models.len() >= routing_threshold)
         .map(|(key, tally)| {
-            let repo = repo_map.get(&key.tool).cloned();
-            let (decision, reason) = match repo {
-                Some(_) => ("dry_run".to_owned(), None),
-                None => ("skipped".to_owned(), Some("unmapped_tool".to_owned())),
+            let (repo, decision, reason) = match repo_map.get(&key.tool) {
+                // Third-party upstream (`upstream = true`, design D2):
+                // mapped for parity completeness, but never a filing
+                // candidate — we don't raise tickets in repos we don't
+                // control. Recorded as skipped, never dropped.
+                Some(target) if target.upstream => (
+                    Some(target.repo.clone()),
+                    "skipped".to_owned(),
+                    Some("unmapped_upstream".to_owned()),
+                ),
+                Some(target) => (Some(target.repo.clone()), "dry_run".to_owned(), None),
+                None => (None, "skipped".to_owned(), Some("unmapped_tool".to_owned())),
             };
             ProposalRow {
                 token: format!("evallerina:{}:{}", key.scenario, key.fault_class),
@@ -265,25 +276,6 @@ struct FaultTally {
 }
 
 use std::collections::BTreeSet;
-
-/// Parse routing.toml content into the tool → repo map. Structure is
-/// deliberately minimal: `[<tool>]` tables with a `repo` string.
-pub fn parse_routing_toml(content: &str) -> Result<BTreeMap<String, String>, String> {
-    let value: toml::Value =
-        toml::from_str(content).map_err(|e| format!("routing.toml parse error: {e}"))?;
-    let mut map = BTreeMap::new();
-    let table = value
-        .as_table()
-        .ok_or("routing.toml must be a table of [tool] sections")?;
-    for (tool, item) in table {
-        let repo = item
-            .get("repo")
-            .and_then(toml::Value::as_str)
-            .ok_or_else(|| format!("routing.toml [{tool}] lacks a `repo` string"))?;
-        map.insert(tool.clone(), repo.to_owned());
-    }
-    Ok(map)
-}
 
 /// Resolve a mapped repo path: absolute paths pass through untouched
 /// (target-repo worktrees); relative paths resolve against the
