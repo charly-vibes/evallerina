@@ -237,6 +237,12 @@ pub struct TrialReport {
     pub timed_out_step: Option<usize>,
     /// Applied sandbox isolation, recorded honestly.
     pub sandbox: SandboxReport,
+    /// Verbatim transport failure detail for `http_error` rows (status
+    /// code and provider message when the adapter supplies them).
+    /// Additive field, report_version 1 unchanged; omitted, never null,
+    /// for every other status (evallerina-pws).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_error_detail: Option<String>,
     /// Token-estimate usage (chars/4 heuristic, labeled heuristic).
     pub token_estimate: usize,
 }
@@ -495,6 +501,8 @@ pub fn run_trial_with_arm(
     // and persistent malformation; when the loop exits via `done`, the
     // deterministic checks decide between Passed and Failed.
     let mut terminal: Option<TrialStatus> = None;
+    // Verbatim transport failure for http_error rows (evallerina-pws).
+    let mut http_error_detail: Option<String> = None;
 
     // Turn context: scenario prompt + fixture root path ONLY.
     let system = Message {
@@ -554,18 +562,21 @@ pub fn run_trial_with_arm(
                         terminal = Some(TrialStatus::RateLimited);
                         break;
                     }
-                    Err(TransportError::Http(_e)) => {
+                    Err(TransportError::Http(e)) => {
                         // Mid-trial HTTP error: end this cell as its own
                         // recorded row — the remaining registry must
-                        // still run.
+                        // still run. Capture the failure verbatim.
+                        http_error_detail = Some(e);
                         terminal = Some(TrialStatus::HttpError);
                         break;
                     }
                 }
             }
-            Err(TransportError::Http(_e)) => {
+            Err(TransportError::Http(e)) => {
                 // Mid-trial HTTP error: end this cell as its own
                 // recorded row — the remaining registry must still run.
+                // Capture the failure verbatim.
+                http_error_detail = Some(e);
                 terminal = Some(TrialStatus::HttpError);
                 break;
             }
@@ -714,6 +725,7 @@ pub fn run_trial_with_arm(
             // sandbox (namespaces/VM); recorded honestly here.
             network_isolation: "not_enforced_in_process",
         },
+        http_error_detail,
         token_estimate: estimate_tokens(traffic_chars),
     })
 }

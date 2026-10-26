@@ -258,6 +258,66 @@ fn rotation_contains_mid_trial_http_error_as_row_not_abort() {
     assert_eq!(rows, 2, "each cell records its own row");
 }
 
+/// The http_error row captures the transport failure verbatim (evallerina-pws):
+/// without it the machine-readable artifact cannot distinguish a retired
+/// model slug (404) from an auth problem (401) or a provider outage (5xx),
+/// which is exactly what the registry-revalidation decision needs. Additive
+/// field — rows without a transport error carry no key (report_version 1
+/// unchanged).
+#[test]
+fn http_error_row_carries_transport_reason_verbatim() {
+    let mut factory = fake_factory(|| {
+        Err(TransportError::Http(
+            "http 404: model unavailable for free".into(),
+        ))
+    });
+    let scenarios = [probe_scenario()];
+    let events = run_rotation(
+        &scenarios,
+        &["dead/model:free".to_owned()],
+        1,
+        &mut factory,
+        &default_bounds(),
+        &budget_open,
+    )
+    .expect("mid-trial transport error must not abort the rotation");
+
+    match &events[0] {
+        RotationEvent::Trial { report } => {
+            assert_eq!(report.status, TrialStatus::HttpError);
+            let detail = report
+                .http_error_detail
+                .as_deref()
+                .expect("http_error rows must carry the transport reason");
+            assert_eq!(detail, "http 404: model unavailable for free");
+            // Serialized row carries the detail as a JSON string.
+            let row = serde_json::to_value(report).expect("serialize trial row");
+            assert_eq!(
+                row["http_error_detail"],
+                serde_json::json!("http 404: model unavailable for free")
+            );
+        }
+        _ => panic!("expected a trial row"),
+    }
+}
+
+/// A passing trial (or any non-http_error status) omits the detail key
+/// entirely — additive serialization, never null (evallerina-pws).
+#[test]
+fn non_http_error_rows_omit_http_error_detail_key() {
+    let mut transport = FakeTransport::new(vec![Ok(action("true", true))]);
+    let report = run_trial(
+        &probe_scenario(),
+        "deepseek/deepseek-v4-flash:free",
+        0,
+        &mut transport,
+        &default_bounds(),
+    )
+    .expect("trial completes");
+    let row = serde_json::to_value(&report).expect("serialize trial row");
+    assert!(row.get("http_error_detail").is_none(), "no key, never null");
+}
+
 // ── action protocol ──────────────────────────────────────────────────────────
 
 /// A parseable action is executed exactly once, with `executed: true`, and
