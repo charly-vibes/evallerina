@@ -1,0 +1,7 @@
+ticket: evallerina-vrr
+branch: main
+topic: add-ecosystem-doc-evals vrr
+brief_path:
+steps:
+  - step: gates
+    sha: 4c1b15f
