@@ -1,7 +1,13 @@
 ticket: evallerina-vrr
 branch: main
 topic: add-ecosystem-doc-evals vrr
-brief_path:
+brief_path: .wai/projects/evallerina/briefs/evallerina-vrr.md
 steps:
   - step: gates
     sha: 4c1b15f
+  - step: brief
+    sha: 3a8710d
+  - step: spawn
+    sha: 03a2617
+  - step: verify
+    sha: 03a2617

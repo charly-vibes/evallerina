@@ -1,0 +1,2 @@
+Warning: No project session found with id 'evallerina-vrr-verify-1'; creating a new session with that id.
+The verification report has been written to `.wai/projects/evallerina/research/verify-evallerina-vrr.md`. The verdict is `REVIEW_REQUIRED` due to the issue with the `cargo test --test evals_replay turu doc-findability` command.
