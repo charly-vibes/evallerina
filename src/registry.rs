@@ -28,16 +28,23 @@ pub const REGISTRY: &[RegistryEntry] = &[
         id: "openrouter/free",
         free: true,
     },
+    // Revalidated 2026-10-26 against https://openrouter.ai/api/v1/models
+    // (evallerina-8li): deepseek/deepseek-v4-flash:free,
+    // qwen/qwen3-coder:free, and meta-llama/llama-3.3-70b-instruct:free
+    // are no longer in the 466-model catalog (http_error 404 on every
+    // Oct 12/19 rotation cell). Replacements picked from the 17 live
+    // :free ids — one coder, one generalist, one reasoning model —
+    // recorded verbatim.
     RegistryEntry {
-        id: "deepseek/deepseek-v4-flash:free",
+        id: "cohere/north-mini-code:free",
         free: true,
     },
     RegistryEntry {
-        id: "qwen/qwen3-coder:free",
+        id: "google/gemma-4-26b-a4b-it:free",
         free: true,
     },
     RegistryEntry {
-        id: "meta-llama/llama-3.3-70b-instruct:free",
+        id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         free: true,
     },
 ];
