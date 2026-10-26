@@ -11,3 +11,5 @@ steps:
     sha: 03a2617
   - step: verify
     sha: 03a2617
+  - step: ship
+    sha: 27f8f3c
