@@ -22,6 +22,10 @@
   {
    "step": "verify",
    "sha": "5110810"
+  },
+  {
+   "step": "ship",
+   "sha": "6a71ebf"
   }
  ]
 }
