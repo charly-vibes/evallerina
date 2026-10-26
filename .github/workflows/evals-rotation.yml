@@ -32,6 +32,10 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+# The persist step (evallerina-17o) commits rotation rows back to main.
+permissions:
+  contents: write
+
 jobs:
   rotation:
     name: Tier 2 — live rotation (scenario × model cells)
@@ -71,6 +75,28 @@ jobs:
       - name: Aggregate + route (dry-run)
         run: |
           cargo run --release -- report reports/tier2-rotation.jsonl --route
+
+      # Persist the rows in-repo (evallerina-17o): GHA artifacts expire,
+      # and the fault dashboard must be reviewable without GHA access.
+      # Append-only: new rows are appended to the tracked jsonl and
+      # committed; no rows -> no commit (git commit --allow-empty is
+      # intentionally NOT used, so an absent/skipped rotation is silent).
+      - name: Persist rotation rows in-repo
+        if: always()
+        run: |
+          if [ -f reports/tier2-rotation.jsonl ]; then
+            git config user.name "evallerina-rotation-bot"
+            git config user.email "evallerina-rotation-bot@users.noreply.github.com"
+            git add -f reports/tier2-rotation.jsonl
+            if ! git diff --cached --quiet; then
+              git commit -m "chore(reports): append tier-2 rotation rows ($(date -u +%F))"
+              git push
+            else
+              echo "no new rows (absent/skipped rotation) — nothing to persist"
+            fi
+          else
+            echo "no rows produced this rotation"
+          fi
 
       - name: Upload rotation rows
         if: always()
