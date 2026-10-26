@@ -15,7 +15,8 @@ use crate::envelope::{
     ok_envelope_loose, stderr_did_you_mean,
 };
 use genesis::evals::{
-    DistractorKind, Scenario, agent_executed_all, agent_followed_hint, doc_drift_blindness,
+    CheckOutcome, DistractorKind, Scenario, ScenarioResult, agent_executed_all,
+    agent_followed_hint, doc_drift_blindness,
 };
 
 /// Directory holding recorded trajectories, relative to the crate root.
@@ -30,6 +31,31 @@ pub const DOC_DRIFT_DIR: &str = "scenarios/doc-drift";
 /// Directory holding archetype smoke trajectories (`scenarios/archetypes/`,
 /// evallerina-sqq).
 pub const ARCHETYPE_DIR: &str = "scenarios/archetypes";
+
+/// Subdirectory holding the doc-findability family (evallerina-vrr):
+/// recordings of an agent finding a documented feature through the
+/// fixture's `llms.txt` breadcrumb and running the documented command.
+pub const DOC_FINDABILITY_DIR: &str = "scenarios/doc-findability";
+
+/// Step budget for the doc-findability family's breadcrumb search: a
+/// replay step within this many turns must reference the seeded doc
+/// path, or the doc is declared unfindable (`ERR_DOC_NOT_FINDABLE`).
+pub const DOC_FINDABILITY_STEP_BUDGET: usize = 6;
+
+/// The tool a scenario definition evaluates — the `tool` field on live
+/// trial rows and the routing repo key for generic (code-less) tool
+/// faults. Historically every live scenario evaluated wai (the row
+/// field was hardcoded); the doc-findability family (evallerina-vrr) is
+/// the first to evaluate a different tool, keyed by the family's
+/// `turu-` name prefix. Scenario names prefix-encode the eval target by
+/// convention.
+pub fn scenario_tool(name: &str) -> &'static str {
+    if name.starts_with("turu-") {
+        "turu"
+    } else {
+        "wai"
+    }
+}
 
 /// The smoke scenario (evallerina-e10 Must gate).
 ///
@@ -69,6 +95,12 @@ pub fn live_scenarios() -> Vec<Scenario> {
         // their recordings land.
         polyglot_seam_scenario(),
         drifted_ecosystem_scenario(),
+        // Doc-findability family (evallerina-vrr): the first behavioral
+        // doc-coverage scenario — the agent must FIND a documented turu
+        // feature through the llms.txt breadcrumb and run the documented
+        // command. Recording order = adoption order (design D5): the
+        // recorded JSON joins the battery in the same commit.
+        turu_doc_findability_scenario(),
     ]
 }
 
@@ -455,4 +487,176 @@ pub fn drifted_ecosystem_scenario() -> Scenario {
     .check("agent-followed-hint", agent_followed_hint(1, "wai doctor"))
     .check("agent-executed-all", agent_executed_all())
     .check("init-recovery-ok", ok_envelope_loose(2))
+}
+
+// ---------------------------------------------------------------------
+// evallerina-vrr: doc-findability family (turu)
+// ---------------------------------------------------------------------
+
+/// Fixture entry point for [`turu_doc_findability_scenario`]: the
+/// repo-slice `llms.txt`. The breadcrumb is deliberately NOT the first
+/// thing in the file — the agent must read past the overview and follow
+/// the "Feature docs" section to the seeded doc.
+pub const TURU_DOC_FINDABILITY_LLMS_TXT: &str = "\
+# turu — whisper workspace knowledge
+
+turu is the whisper CLI: a knowledge-scope manager for agent checkouts.
+It keeps per-repo and per-branch knowledge files under `.whisper/`, with
+canonical repo keys, distill contracts, and transport-agnostic bundles.
+
+## Usage
+
+Every turu command emits a genesis envelope: pass `--json` for
+machine-readable output, read `ok`, and follow `hints` when present.
+
+## House rules
+
+Knowledge files are append-only between distills; the managed block in
+AGENTS.md is turu's surface in the agent-facing config.
+
+## Feature docs
+
+- [Canonical repo key](docs/features/repo-key.md) — how turu derives a
+  workspace's deterministic repo key, and the command that prints it.
+";
+
+/// The seeded feature doc for [`turu_doc_findability_scenario`].
+///
+/// Documents a REAL turu capability, verified hermetically before the
+/// capability was committed to (evallerina-vrr provenance): with the
+/// fixture root as cwd, an isolated scratch `HOME`, and a scrubbed
+/// environment, `turu key --json` exits 0 with an ok envelope carrying
+/// `data.repo_key` — pure determinism from the checkout path, no
+/// network, no git history, no writes to the working directory (probe:
+/// scratch non-git dir, `HOME=$(mktemp -d)`, turu v0.11.1, exit 0).
+pub const TURU_DOC_FINDABILITY_REPO_KEY_DOC: &str = "\
+# Feature: canonical repo key
+
+`turu key --json` derives the workspace's canonical repo key — pure
+determinism from the checkout path. No network, no git history reads,
+no writes: it is safe to run anywhere, in any checkout state.
+
+The key identifies the repo slot turu stores knowledge under (see the
+`data.repo_key` field of the envelope). Odd keys like `local/...`
+belong to paths outside any known repository host.
+
+## Command
+
+```
+turu key --json
+```
+
+Exits 0 with `ok: true`; the envelope's `data` carries `repo_key`,
+`branch_slug`, `worktree_slot`, and `workspace_root`.
+";
+
+/// Doc-findability check: some replay step within
+/// [`DOC_FINDABILITY_STEP_BUDGET`] references the exact seeded doc path
+/// in its command. Failure is a TOOL fault (`taxonomy: None`) — a doc
+/// the agent could not find is doc-authoring debt; the declared fault
+/// class (`ERR_DOC_NOT_FINDABLE`, src/live.rs scoring seam) routes it
+/// to the tool's repository.
+pub fn doc_path_referenced_within_budget(
+    doc_path: &'static str,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    move |result: &ScenarioResult| {
+        let referenced = result
+            .steps
+            .iter()
+            .take(DOC_FINDABILITY_STEP_BUDGET)
+            .any(|s| s.command.contains(doc_path));
+        if referenced {
+            CheckOutcome::Pass
+        } else {
+            CheckOutcome::tool_fault(format!(
+                "no replay step within the first {} steps references the seeded doc path \
+                 '{doc_path}' — the agent did not reach the documented feature through the \
+                 breadcrumb channel",
+                DOC_FINDABILITY_STEP_BUDGET
+            ))
+        }
+    }
+}
+
+/// Doc-findability check: the first `turu` command after the doc-path
+/// reference exits 0 — the documented command actually works in the
+/// trial sandbox. When the doc path was never referenced, this check is
+/// vacuously satisfied: the blindness is scored (once) by
+/// [`doc_path_referenced_within_budget`], and double-failing here would
+/// file two tickets for one root cause. Failure is a TOOL fault: the
+/// documented command failing is a tool fault, never an agent fault.
+pub fn follow_up_command_succeeds(
+    doc_path: &'static str,
+) -> impl Fn(&ScenarioResult) -> CheckOutcome {
+    move |result: &ScenarioResult| {
+        let Some(idx) = result
+            .steps
+            .iter()
+            .take(DOC_FINDABILITY_STEP_BUDGET)
+            .position(|s| s.command.contains(doc_path))
+        else {
+            // Unreachable doc: scored by the doc-path check alone.
+            return CheckOutcome::Pass;
+        };
+        match result.steps[idx + 1..]
+            .iter()
+            .find(|s| s.command.contains("turu"))
+        {
+            Some(step) if step.exit_code == 0 => CheckOutcome::Pass,
+            Some(step) => CheckOutcome::tool_fault(format!(
+                "the first turu command after the doc-path reference exited {}: `{}`",
+                step.exit_code, step.command
+            )),
+            None => CheckOutcome::tool_fault(
+                "no turu command followed the doc-path reference — the documented command \
+                 was never run",
+            ),
+        }
+    }
+}
+
+/// The turu doc-findability scenario (evallerina-vrr, first member of
+/// the doc-findability family; openspec add-ecosystem-doc-evals task
+/// 4.1/4.2).
+///
+/// Fixture (in-scenario, genesis `Fixture` builder): a whisper repo
+/// slice — an `llms.txt` entry point ([`TURU_DOC_FINDABILITY_LLMS_TXT`])
+/// whose "Feature docs" section breadcrumbs a seeded feature doc
+/// ([`TURU_DOC_FINDABILITY_REPO_KEY_DOC`] at `docs/features/repo-key.md`). The agent
+/// must follow the breadcrumb and run the documented command
+/// (`turu key --json`), verified to exit 0 hermetically in the trial
+/// sandbox (fixture root as cwd, isolated HOME, scrubbed env).
+///
+/// Checks (process-boundary ONLY — commands + exit codes, never
+/// free-form agent text):
+/// - `doc-path-referenced-within-budget` — a replay step within 6 steps
+///   references the exact seeded doc path; failure = declared tool-fault
+///   class `ERR_DOC_NOT_FINDABLE` (reuses
+///   `crate::doc_audit::ERR_DOC_NOT_FINDABLE` via the live.rs scoring
+///   seam), routed to turu → repo `../whisper`.
+/// - `follow-up-command-succeeds` — the first turu command after the
+///   doc-path reference exits 0 (tool fault if broken).
+///
+/// Recorded live against turu 0.11.0 (whisper-vibes, tag v0.11.1
+/// provenance) on 2026-10-26:
+/// `scenarios/doc-findability/turu-doc-findability-repo-key.json`.
+pub fn turu_doc_findability_scenario() -> Scenario {
+    Scenario::new(
+        "turu-doc-findability-repo-key",
+        "This directory's llms.txt is the documentation entry point. Find the \
+         feature doc about turu's canonical repo key and run the command it documents.",
+    )
+    .fixture_file("llms.txt", TURU_DOC_FINDABILITY_LLMS_TXT)
+    .fixture_file(
+        "docs/features/repo-key.md",
+        TURU_DOC_FINDABILITY_REPO_KEY_DOC,
+    )
+    .check(
+        "doc-path-referenced-within-budget",
+        doc_path_referenced_within_budget("docs/features/repo-key.md"),
+    )
+    .check(
+        "follow-up-command-succeeds",
+        follow_up_command_succeeds("docs/features/repo-key.md"),
+    )
 }

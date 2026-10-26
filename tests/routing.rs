@@ -285,6 +285,81 @@ fn recorded_wai(scenario: &str) -> Option<String> {
     (scenario == "wai-hint-adherence-typo").then(|| "wai".to_owned())
 }
 
+// ── doc-findability intake (evallerina-vrr) ──────────────────────────────
+
+/// A tier-2 trial row from the doc-findability family: the blind-agent
+/// failure carries the declared tool-fault class on the CheckRow
+/// (src/live.rs scoring seam), so the doc-coverage routing intake arm
+/// keys the repo on the row's `tool` field — turu → ../whisper.
+fn doc_findability_row(model: &str) -> serde_json::Value {
+    json!({
+        "kind": "trial",
+        "report_version": 1,
+        "scenario": "turu-doc-findability-repo-key",
+        "tool": "turu",
+        "model": model,
+        "status": "failed",
+        "checks": [{
+            "name": "doc-path-referenced-within-budget",
+            "passed": false,
+            "code": "ERR_DOC_NOT_FINDABLE"
+        }]
+    })
+}
+
+#[test]
+fn doc_findability_row_routes_to_turu_whisper_never_genesis() {
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| doc_findability_row(m))
+        .collect();
+    // routing.toml map: turu → ../whisper (binary/crate name mismatch).
+    let repos: std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> = [(
+        "turu".to_owned(),
+        evallerina::routing_parity::RoutingEntry {
+            repo: "../whisper".to_owned(),
+            upstream: false,
+        },
+    )]
+    .into();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repos)
+        .expect("doc-findability rows route via the doc-coverage intake arm");
+    assert_eq!(proposals.len(), 1, "one fault key above threshold");
+    let p = &proposals[0].to_json();
+    assert_eq!(p["scenario"], "turu-doc-findability-repo-key");
+    assert_eq!(p["fault_class"], "ERR_DOC_NOT_FINDABLE");
+    assert_eq!(
+        p["token"],
+        "evallerina:turu-doc-findability-repo-key:ERR_DOC_NOT_FINDABLE"
+    );
+    // Anti-goal pin: the proposal is keyed turu/whisper — never genesis,
+    // never AIX-channel work. The doc-coverage intake arm keys the repo
+    // on the row's tool field, and routing.toml maps turu → ../whisper.
+    assert_eq!(p["tool"], "turu");
+    assert_eq!(p["repo"], "../whisper");
+    assert_eq!(p["decision"], "dry_run");
+    assert_eq!(p["reason"], serde_json::Value::Null);
+}
+
+#[test]
+fn doc_findability_row_without_turu_in_map_is_skipped_loud_never_misrouted() {
+    // A turu row against a map without the turu entry (e.g. an older
+    // routing.toml) records skipped/unmapped_tool — it must NOT fall
+    // back to some default repo (never genesis, never AIX).
+    let rows: Vec<serde_json::Value> = ["m/a", "m/b", "m/c"]
+        .iter()
+        .map(|m| doc_findability_row(m))
+        .collect();
+    let proposals = routing::propose(&rows, &three_models(), &recorded_wai, &repo_map())
+        .expect("unmapped tool is a recorded skip, not an error");
+    assert_eq!(proposals.len(), 1);
+    let p = &proposals[0].to_json();
+    assert_eq!(p["decision"], "skipped");
+    assert_eq!(p["reason"], "unmapped_tool");
+    assert_eq!(p["repo"], serde_json::Value::Null);
+    assert_eq!(p["tool"], "turu", "the row's tool is preserved verbatim");
+}
+
 fn repo_map() -> std::collections::BTreeMap<String, evallerina::routing_parity::RoutingEntry> {
     [(
         "wai".to_owned(),

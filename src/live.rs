@@ -160,8 +160,13 @@ pub struct CheckRow {
     pub name: String,
     /// true when the check passed.
     pub passed: bool,
-    /// Agent-fault classification, present when and only when the
-    /// failure is an agent fault (omitted otherwise, never null).
+    /// Fault classification on a failed check. Agent faults carry the
+    /// `ERR_*` taxonomy code; tool faults carry `None` (omitted) by
+    /// contract — with one additive exception (evallerina-vrr): the
+    /// doc-findability family's declared fault classes (e.g.
+    /// `ERR_DOC_NOT_FINDABLE`) ride on the row as TOOL faults (no agent
+    /// taxonomy) so the doc-coverage routing intake arm routes them to
+    /// the row's tool's repository instead of AIX-channel work.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<&'static str>,
     /// Human-readable reason (for humans and tickets, not parsed by
@@ -332,6 +337,11 @@ impl Transport for OpenRouterTransport {
     }
 }
 
+/// Base PATH for the sandboxed execution environment (allowlist order
+/// preserved from the original scrubbed sandbox); the parent process's
+/// PATH is appended at trial time (see `execute_sandboxed`).
+const SANDBOX_BASE_PATH: &str = "/usr/local/bin:/usr/bin:/bin:/run/current-system/sw/bin";
+
 /// Execute one command inside the sandbox: fixture root as cwd, isolated
 /// HOME, scrubbed env, wall-clock timeout. Returns the recorded step and
 /// whether the step was terminated by the timeout.
@@ -343,13 +353,23 @@ fn execute_sandboxed(
 ) -> (ReplayStep, bool) {
     let mut cmd = Command::new("sh");
     cmd.arg("-c").arg(command).current_dir(fixture_root);
-    // Scrubbed environment: minimal allowlist. Isolated HOME.
+    // Scrubbed environment: minimal allowlist. Isolated HOME. PATH
+    // survives (evallerina-vrr): the base allowlist is extended with the
+    // parent process's PATH so cargo-installed eval targets (~/.cargo/bin)
+    // stay reachable. The allowlist alone is NOT hermeticity — it was a
+    // latent 127 generator: rotation rows from 2026-10-12/19 show `wai`
+    // exit 127 inside this sandbox because the binary was only on the
+    // parent PATH. Command lookup is the only thing PATH widens; every
+    // other variable stays scrubbed and HOME stays isolated.
     cmd.env_clear();
     cmd.env("HOME", home);
-    cmd.env(
-        "PATH",
-        "/usr/local/bin:/usr/bin:/bin:/run/current-system/sw/bin",
-    );
+    let parent_path = std::env::var("PATH").unwrap_or_default();
+    let sandbox_path = if parent_path.is_empty() {
+        SANDBOX_BASE_PATH.to_owned()
+    } else {
+        format!("{}:{parent_path}", SANDBOX_BASE_PATH)
+    };
+    cmd.env("PATH", sandbox_path);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     let Ok(mut child) = cmd.spawn() else {
@@ -422,6 +442,26 @@ fn execute_sandboxed(
                 );
             }
         }
+    }
+}
+
+/// Declared fault classes for checks whose failures are tool faults
+/// carrying a fault-class code (evallerina-vrr): `CheckOutcome::Fail`
+/// carries no tool-fault code, so evallerina-local declarations bridge
+/// the gap at the scoring seam — the code routes the failing check
+/// through the doc-coverage routing intake arm (src/routing.rs) to the
+/// row's tool's repository, never genesis/AIX. Keyed on (scenario,
+/// check-name); no genesis changes, no upstream edits.
+pub fn declared_fault_class(scenario_name: &str, check_name: &str) -> Option<&'static str> {
+    match (scenario_name, check_name) {
+        // Doc-findability family: a doc the agent could not find through
+        // the breadcrumb channel is doc-authoring debt in the tool's repo.
+        (_, "doc-path-referenced-within-budget")
+            if scenario_name.starts_with("turu-doc-findability-") =>
+        {
+            Some(crate::doc_audit::ERR_DOC_NOT_FINDABLE)
+        }
+        _ => None,
     }
 }
 
@@ -686,7 +726,11 @@ pub fn run_trial_with_arm(
             checks.push(CheckRow {
                 name: check.name.clone(),
                 passed: false,
-                code: row.0.as_ref().map(ErrorTaxonomy::code),
+                code: row
+                    .0
+                    .as_ref()
+                    .map(ErrorTaxonomy::code)
+                    .or(declared_fault_class(&scenario.name, &check.name)),
                 reason: Some(row.1),
             });
         }
@@ -706,7 +750,7 @@ pub fn run_trial_with_arm(
     Ok(TrialReport {
         report_version: REPORT_VERSION,
         scenario: scenario.name.clone(),
-        tool: "wai".into(),
+        tool: crate::scenario::scenario_tool(&scenario.name).into(),
         status,
         fault_code,
         replay,

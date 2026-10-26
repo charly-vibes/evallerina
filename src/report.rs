@@ -41,6 +41,8 @@ pub fn scenario_tool_of(name: &str) -> Option<String> {
         Some("wai".to_owned())
     } else if name.starts_with("dont-") {
         Some("dont".to_owned())
+    } else if name.starts_with("turu-") {
+        Some("turu".to_owned())
     } else {
         None
     }
@@ -151,6 +153,10 @@ pub fn scenario_channel(name: &str) -> Option<&'static str> {
         // report_version stays 1) probe the `docs` channel — feature
         // documentation is the output channel the audit checks.
         "doc-audit" => Some("docs"),
+        // Doc-findability family (evallerina-vrr): the checks probe
+        // whether feature documentation is findable through its
+        // breadcrumb channel — same `docs` channel as the audit.
+        "turu-doc-findability-repo-key" => Some("docs"),
         _ => None,
     }
 }

@@ -6,12 +6,14 @@
 //! failure modes are still detected, with zero model calls and zero
 //! network; `just tier1` gates nightly on this file.
 
+use evallerina::live::{Bounds, Message, Transport, TransportError, TrialStatus, run_trial};
 use evallerina::recorded::RecordedTrajectory;
 use evallerina::scenario::{
-    ARCHETYPE_DIR, DOC_DRIFT_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD, STALE_WAI_AGENTS_MD,
-    dont_doc_drift_scenario, dont_lifecycle_scenario, drifted_ecosystem_scenario,
-    live_scenario_by_name, live_scenarios, polyglot_seam_scenario, smoke_scenario,
-    wai_corrupt_config_scenario, wai_doc_drift_scenario, wai_typo_scenario,
+    ARCHETYPE_DIR, DOC_DRIFT_DIR, DOC_FINDABILITY_DIR, HINT_ADHERENCE_DIR, STALE_DONT_AGENTS_MD,
+    STALE_WAI_AGENTS_MD, dont_doc_drift_scenario, dont_lifecycle_scenario,
+    drifted_ecosystem_scenario, live_scenario_by_name, live_scenarios, polyglot_seam_scenario,
+    smoke_scenario, turu_doc_findability_scenario, wai_corrupt_config_scenario,
+    wai_doc_drift_scenario, wai_typo_scenario,
 };
 use genesis::evals::{AgentStep, Scenario, agent_executed_all, agent_followed_hint};
 
@@ -529,8 +531,8 @@ fn battery_registers_both_archetype_scenarios() {
     let names: Vec<String> = live_scenarios().iter().map(|s| s.name.clone()).collect();
     assert_eq!(
         names.len(),
-        8,
-        "battery shape: 6 live + 2 archetype, got {names:?}"
+        9,
+        "battery shape: 6 live + 2 archetype + 1 doc-findability, got {names:?}"
     );
     assert!(
         names.iter().any(|n| n == "vampiro-polyglot-seam"),
@@ -577,4 +579,127 @@ fn battery_excludes_stub_archetype_fixtures() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// evallerina-vrr: doc-findability family under scenarios/doc-findability/
+// ---------------------------------------------------------------------
+
+/// A doctored AgentStep with executed=true (models a wandering blind
+/// agent that really ran its commands).
+fn blind_step(command: &str) -> AgentStep {
+    AgentStep {
+        command: command.to_owned(),
+        stdout: String::new(),
+        stderr: String::new(),
+        exit_code: 0,
+        executed: true,
+    }
+}
+
+/// Scripted one-action-per-turn transport (same seam as
+/// tests/live_protocol.rs's FakeTransport, local to this file).
+struct ScriptedTransport {
+    completions: Vec<Result<String, TransportError>>,
+}
+
+impl ScriptedTransport {
+    fn new(completions: Vec<Result<String, TransportError>>) -> Self {
+        Self { completions }
+    }
+}
+
+impl Transport for ScriptedTransport {
+    fn complete(&mut self, _messages: &[Message]) -> Result<String, TransportError> {
+        if self.completions.is_empty() {
+            return Err(TransportError::Http("script exhausted".into()));
+        }
+        self.completions.remove(0)
+    }
+}
+
+fn scripted_action(command: &str, done: bool) -> String {
+    serde_json::json!({ "command": command, "done": done }).to_string()
+}
+
+/// Detection gate (evallerina-vrr): a mutated transcript whose agent
+/// never references the seeded doc path — it reads llms.txt and wanders,
+/// but never follows the breadcrumb — must fail the doc-path check as a
+/// TOOL fault: no agent taxonomy (taxonomy None), because a doc the
+/// agent could not find is doc-authoring debt routed to the tool's
+/// repository, never an agent-fault code.
+#[test]
+fn turu_doc_findability_blind_replay_is_detected() {
+    let steps = vec![
+        blind_step("ls -la"),
+        // The entry point was read — and still no breadcrumb followed.
+        blind_step("cat llms.txt"),
+        blind_step("cat AGENTS.md"),
+        blind_step("cat README.md"),
+        blind_step("true"),
+        blind_step("true"),
+    ];
+    let scenario = turu_doc_findability_scenario();
+    let report = scenario.run(steps).expect("fixture materializes");
+    assert!(!report.passed, "blind replay must fail");
+    let failed: Vec<&str> = report
+        .failures
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert_eq!(
+        failed,
+        vec!["doc-path-referenced-within-budget"],
+        "exactly the doc-path check must fail: {failed:?}"
+    );
+    for (name, outcome) in &report.failures {
+        match outcome {
+            genesis::evals::CheckOutcome::Fail { taxonomy, .. } => {
+                assert!(
+                    taxonomy.is_none(),
+                    "{name} must carry NO agent taxonomy — doc findability is a tool fault"
+                );
+            }
+            genesis::evals::CheckOutcome::Pass => panic!("{name} unexpectedly passed"),
+        }
+    }
+}
+
+/// Fault-class seam (evallerina-vrr): a blind LIVE trial must produce a
+/// `CheckRow` whose `code` is `ERR_DOC_NOT_FINDABLE` — the declared
+/// fault class, despite `CheckOutcome::Fail` carrying no tool-fault
+/// taxonomy — so the routing intake arm routes the row to the row's
+/// tool (turu → ../whisper), never genesis/AIX.
+#[test]
+fn failing_doc_path_check_carries_declared_fault_class() {
+    let mut transport = ScriptedTransport::new(vec![
+        Ok(scripted_action("ls -la", false)),
+        Ok(scripted_action("cat llms.txt", false)),
+        Ok(scripted_action("true", true)),
+    ]);
+    let scenario = turu_doc_findability_scenario();
+    let report = run_trial(
+        &scenario,
+        "test/scripted",
+        0,
+        &mut transport,
+        &Bounds::default(),
+    )
+    .expect("trial runs hermetically");
+    assert_eq!(report.status, TrialStatus::Failed);
+    assert_eq!(report.tool, "turu", "the row's tool is the scenario's tool");
+    let row = report
+        .checks
+        .iter()
+        .find(|c| c.name == "doc-path-referenced-within-budget")
+        .expect("doc-path check is declared");
+    assert!(!row.passed);
+    assert_eq!(
+        row.code,
+        Some(evallerina::doc_audit::ERR_DOC_NOT_FINDABLE),
+        "declared fault class must surface on the CheckRow despite taxonomy None"
+    );
+    // The serialized observable the routing intake keys on:
+    let row_json = serde_json::to_value(row).unwrap();
+    assert_eq!(row_json["code"], "ERR_DOC_NOT_FINDABLE");
 }
