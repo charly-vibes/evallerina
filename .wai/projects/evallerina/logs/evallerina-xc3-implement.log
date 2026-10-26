@@ -1,0 +1,20 @@
+Warning: No project session found with id 'evallerina-xc3-impl-1'; creating a new session with that id.
+Done. Final report:
+
+## Report — evallerina-xc3
+
+**Commit:** `dd1352df650a467dd5ba73d66ccaa7b1ec319e19` — `report: separate invalid_output faults from failed-trial hint-blindness (evallerina-xc3)` (single atomic commit for the one red→green cycle; not pushed, `.beads/` untouched, ticket left IN_PROGRESS)
+
+**Files changed:**
+- `src/report.rs` (+76/−14): `FaultKey::Agent` gains `status_class` key dimension; agent-fault matrix/routing entries emit additive `status_class` field (tool entries keep prior shape); matrix cell key extended to 4-tuple; conservative `distinct_models`-within-status-class comment; AC-2 derivation-rule comment. `DASHBOARD_VERSION`/`report_version` untouched — all JSON changes additive, no aggregate score.
+- `tests/report_aggregation.rs` (+52): new test `invalid_output_never_blends_into_failed_hint_blindness` (RED first: `status_class` was Null).
+
+**Test counts:**
+- RED: `cargo test --test report_aggregation` → `24 passed; 1 failed` (only the new separation test failed on missing field).
+- GREEN: `25 passed; 0 failed`. **Zero edits to pre-existing assertions** — the field additions broke nothing (completion criterion 3 satisfied with no justification edits needed).
+
+**tier0:** `just tier0` → exit 0, green (the initial run only flagged a `cargo fmt` nit in the new test, fixed before commit; the "error"-matching grep hits were test names like `..._is_a_loud_error`, all passing).
+
+**Follow-up threshold:** not triggered — the `FaultKey` change stayed internal to `src/report.rs` (private enum, no serde contract ripple); routing-threshold semantics only gained the brief-sanctioned conservative within-status-class distinct-model counting.
+
+**Verifier evidence contract (wai-px4g):** brief read at `.wai/projects/evallerina/briefs/evallerina-xc3.md`; fresh test-run output above (`test result: ok. 25 passed; 0 failed` and `just tier0` exit 0).
