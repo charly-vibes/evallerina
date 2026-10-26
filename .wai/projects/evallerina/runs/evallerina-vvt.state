@@ -26,6 +26,10 @@
   {
    "step": "ship",
    "sha": "6a71ebf"
+  },
+  {
+   "step": "stop",
+   "sha": "1f3bfba"
   }
  ]
 }
