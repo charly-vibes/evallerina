@@ -1,0 +1,23 @@
+Warning: No project session found with id 'evallerina-vvt-impl-1'; creating a new session with that id.
+## Report — evallerina-vvt
+
+**Commit:** `0d768e2eea86a799bb282fc4817f391121079442` — `ci(rotation): schedule ablation cells in weekly tier-2 rotation (evallerina-vvt)`
+
+**Files changed (1):** `.github/workflows/evals-rotation.yml` (+25/−3) — no Rust/CLI changes, no other files.
+
+**Change summary:**
+- New **"Run ablation cells"** step, `if: always()`, placed between the rotation step and the aggregate step: `cargo run --release -- ablate wai-hint-adherence-corrupt-config --real-artifacts --budget-mins 5 --out reports/ablation-cells.jsonl` followed by `cat reports/ablation-cells.jsonl | tee -a reports/tier2-rotation.jsonl`
+- `OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}` scoped to the ablation step (as on the rotation step)
+- Budget split: rotation `--budget-mins 20` → `15`; comments in the rotation step and job-level comment document 15 + 5 = 20 total under the 30-min ceiling; ablation step comments note `wai` is on PATH from the install step (so `--real-artifacts` works, loud refusal otherwise) and re-assert `mkdir -p reports` since the step runs unconditionally
+- Persist, aggregate, and upload steps unchanged apart from ordering (they now follow ablation naturally)
+
+**Gate results:**
+| Gate | Result |
+|---|---|
+| RED evidence | Workflow had no `ablate` step; `grep -c "arm" reports/tier2-rotation.jsonl` → 0 (file not present at this checkout; all committed rotation rows predate ablation, all `arm=full` per brief) |
+| YAML parse | ✅ exit 0 (`yaml.safe_load`) |
+| actionlint | ✅ clean (available, ran, no findings) |
+| `just tier0` | ✅ green — 25 unit tests passed, doc-audit clean |
+| Dry-run ablate | ✅ exit 0, 24 rows: **12 `arm=full` + 12 `arm=ablated`** (2 arms × 3 reps × 4 models; all `absent` cells as expected at budget-mins 0) |
+
+**Conflicts:** none — nothing resisted; no follow-up-threshold stop recorded. Per instructions: no push, no ticket close, no `.beads/` edits.

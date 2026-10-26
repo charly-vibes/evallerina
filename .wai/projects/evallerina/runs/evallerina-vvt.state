@@ -1,0 +1,27 @@
+{
+ "ticket": "evallerina-vvt",
+ "branch": "main",
+ "brief_path": ".wai/projects/evallerina/briefs/evallerina-vvt.md",
+ "steps": [
+  {
+   "step": "claim",
+   "sha": "87a4b31"
+  },
+  {
+   "step": "gates",
+   "sha": "87a4b31"
+  },
+  {
+   "step": "brief",
+   "sha": "2b360d5"
+  },
+  {
+   "step": "spawn",
+   "sha": "0d768e2"
+  },
+  {
+   "step": "verify",
+   "sha": "5110810"
+  }
+ ]
+}
