@@ -1,0 +1,1 @@
+SHIP: evallerina-qiq closed lead-side — jlog 2026-10-26 entry + turu branch note carry CORR-001/CORR-003 corrections (13/16, 6/9, 63/72=87.5%, nightly >=12 nights); non-code step (rxs no-spawn precedent); AC-3 verified over bd descriptions. STOP: boundary — remaining ready work is DESIGN/HITL (a3a, 41g) + Nov 2 rotation verification (8li/17o/vvt)
