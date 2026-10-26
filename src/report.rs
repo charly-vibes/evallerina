@@ -156,12 +156,21 @@ pub fn scenario_channel(name: &str) -> Option<&'static str> {
 }
 
 /// One accumulator key in the routing maps: agent faults key on
-/// (channel, code), tool faults on (tool, check, channel) because they
-/// carry no code by contract.
+/// (channel, code, status_class), tool faults on (tool, check, channel)
+/// because they carry no code by contract. The `status_class` dimension
+/// (evallerina-xc3) keeps trial-level `invalid_output` faults
+/// (ERR_ACTION_FORMAT_VIOLATION — empty replays) separate from
+/// failed-trial hint-blindness faults in the same channel.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum FaultKey {
-    /// Agent fault: the `ERR_*` taxonomy code within one output channel.
-    Agent { channel: String, code: String },
+    /// Agent fault: the `ERR_*` taxonomy code within one output channel,
+    /// from a trial of the given status class ("failed" |
+    /// "invalid_output").
+    Agent {
+        channel: String,
+        code: String,
+        status_class: String,
+    },
     /// Tool fault: no code; routed to the tool's repository.
     Tool {
         tool: String,
@@ -202,7 +211,7 @@ pub fn aggregate_rows(
     }
     let routing_threshold = configured_models.len().min(ROUTING_THRESHOLD);
 
-    let mut matrix_cells: BTreeMap<(String, String, String), FaultTally> = BTreeMap::new();
+    let mut matrix_cells: BTreeMap<(String, String, String, String), FaultTally> = BTreeMap::new();
     let mut routings: BTreeMap<FaultKey, FaultTally> = BTreeMap::new();
     let mut coverage = Coverage::default();
     let mut report_versions = BTreeSet::new();
@@ -271,9 +280,17 @@ pub fn aggregate_rows(
             coverage.checks_failed += 1;
             match check.get("code").and_then(serde_json::Value::as_str) {
                 Some(code) => {
+                    // Derivation rule (AC-2, evallerina-xc3): hint-blindness
+                    // counts derive ONLY from status_class="failed" agent
+                    // faults. The check rows of a failed trial carry rich
+                    // exploratory replays; trial-level invalid_output faults
+                    // (ERR_ACTION_FORMAT_VIOLATION) have empty replays by
+                    // definition and key status_class="invalid_output"
+                    // below — the two are never blended.
                     let key = FaultKey::Agent {
                         channel: channel.to_owned(),
                         code: code.to_owned(),
+                        status_class: status.to_owned(),
                     };
                     tally(
                         &mut routings,
@@ -316,6 +333,7 @@ pub fn aggregate_rows(
             let key = FaultKey::Agent {
                 channel: channel.to_owned(),
                 code: code.to_owned(),
+                status_class: "invalid_output".to_owned(),
             };
             tally(&mut routings, &mut matrix_cells, &key, scenario, model, "");
         }
@@ -323,14 +341,22 @@ pub fn aggregate_rows(
 
     let matrix: Vec<serde_json::Value> = matrix_cells
         .iter()
-        .map(|((channel, code, model), tally)| {
-            json!({
+        .map(|((channel, code, model, status_class), tally)| {
+            let mut cell = json!({
                 "channel": channel,
                 "code": code,
                 "model": model,
                 "occurrences": tally.occurrences,
                 "scenarios": tally.scenarios.iter().collect::<Vec<_>>(),
-            })
+            });
+            // Additive (evallerina-xc3): agent-fault cells carry the
+            // trial status class the fault came from; tool-fault cells
+            // (empty status_class by the no-code contract) keep the
+            // prior shape.
+            if !status_class.is_empty() {
+                cell["status_class"] = json!(status_class);
+            }
+            cell
         })
         .collect();
 
@@ -339,11 +365,28 @@ pub fn aggregate_rows(
         .map(|(key, tally)| {
             let distinct_models = tally.models.len();
             match key {
-                FaultKey::Agent { channel, code } => {
+                FaultKey::Agent {
+                    channel,
+                    code,
+                    status_class,
+                } => {
                     // Cross-model threshold: 3 distinct ids for the
                     // channel — or all configured ids when fewer than
                     // three are configured. Below the threshold the
                     // finding is recorded without action.
+                    //
+                    // evallerina-xc3 (conservative reading): distinct
+                    // models are counted WITHIN one status class — the
+                    // status_class key dimension splits the tallies, so
+                    // an invalid_output occurrence can never push a
+                    // failed-class hint-blindness finding over the
+                    // threshold.
+                    //
+                    // Derivation rule (AC-2): hint-blindness findings are
+                    // the status_class="failed" entries; the
+                    // status_class="invalid_output" entries carry
+                    // ERR_ACTION_FORMAT_VIOLATION from empty-replay
+                    // trials and are never folded into those counts.
                     let kind = if distinct_models >= routing_threshold {
                         "aix-channel"
                     } else {
@@ -353,6 +396,7 @@ pub fn aggregate_rows(
                         "kind": kind,
                         "channel": channel,
                         "code": code,
+                        "status_class": status_class,
                         "distinct_models": distinct_models,
                         "occurrences": tally.occurrences,
                         "scenarios": tally.scenarios.iter().collect::<Vec<_>>(),
@@ -395,7 +439,7 @@ pub fn aggregate_rows(
 /// row carries model attribution, into the tier-2 matrix cell.
 fn tally(
     routings: &mut BTreeMap<FaultKey, FaultTally>,
-    matrix_cells: &mut BTreeMap<(String, String, String), FaultTally>,
+    matrix_cells: &mut BTreeMap<(String, String, String, String), FaultTally>,
     key: &FaultKey,
     scenario: &str,
     model: Option<&str>,
@@ -406,11 +450,14 @@ fn tally(
     entry.scenarios.insert(scenario.to_owned());
     if let Some(model) = model {
         entry.models.insert(model.to_owned());
-        let code = match key {
-            FaultKey::Agent { code, .. } => code.clone(),
+        let (code, status_class) = match key {
+            FaultKey::Agent {
+                code, status_class, ..
+            } => (code.clone(), status_class.clone()),
             // Tool faults carry no code; the matrix dimension uses the
-            // check name so tool rows stay visible per capability.
-            FaultKey::Tool { .. } => check.to_owned(),
+            // check name so tool rows stay visible per capability, and
+            // no status_class (empty string keeps the prior cell shape).
+            FaultKey::Tool { .. } => (check.to_owned(), String::new()),
         };
         let cell = matrix_cells
             .entry((
@@ -421,6 +468,7 @@ fn tally(
                 },
                 code,
                 model.to_owned(),
+                status_class,
             ))
             .or_default();
         cell.occurrences += 1;

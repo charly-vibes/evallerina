@@ -169,6 +169,58 @@ fn invalid_output_lands_in_matrix_with_action_format_violation() {
     assert_eq!(cells[0]["occurrences"], 1);
 }
 
+/// EDGE-003 (evallerina-xc3): a failed trial's hint-blindness fault and a
+/// trial-level `invalid_output` fault (ERR_ACTION_FORMAT_VIOLATION) in the
+/// SAME channel are two distinct matrix AND routing entries with distinct
+/// `status_class` values — the invalid_output occurrence is never blended
+/// into the failed-trial hint-blindness counts (its occurrence count
+/// excludes it).
+#[test]
+fn invalid_output_never_blends_into_failed_hint_blindness() {
+    let rows = vec![
+        trial(
+            "wai-hint-adherence-typo",
+            "m1",
+            "failed",
+            json!([agent_fault("ERR_DOC_DRIFT_BLINDNESS")]),
+        ),
+        trial("wai-hint-adherence-typo", "m1", "invalid_output", json!([])),
+    ];
+    let dashboard = aggregate_rows(&rows, &models(3), &test_channel_of).expect("aggregates");
+
+    // Matrix: two distinct entries, distinct status_class values.
+    let cells = dashboard["matrix"].as_array().unwrap();
+    assert_eq!(cells.len(), 2);
+    let hint = cells
+        .iter()
+        .find(|c| c["code"] == "ERR_DOC_DRIFT_BLINDNESS")
+        .expect("hint-blindness cell present");
+    assert_eq!(hint["status_class"], "failed");
+    assert_eq!(hint["occurrences"], 1);
+    let invalid = cells
+        .iter()
+        .find(|c| c["code"] == "ERR_ACTION_FORMAT_VIOLATION")
+        .expect("invalid_output cell present");
+    assert_eq!(invalid["status_class"], "invalid_output");
+    assert_eq!(invalid["occurrences"], 1);
+
+    // Routing: two distinct agent-fault entries, same separation.
+    let routings = dashboard["routing"].as_array().unwrap();
+    assert_eq!(routings.len(), 2);
+    let hint_route = routings
+        .iter()
+        .find(|r| r["code"] == "ERR_DOC_DRIFT_BLINDNESS")
+        .expect("hint-blindness routing entry present");
+    assert_eq!(hint_route["status_class"], "failed");
+    assert_eq!(hint_route["occurrences"], 1);
+    let invalid_route = routings
+        .iter()
+        .find(|r| r["code"] == "ERR_ACTION_FORMAT_VIOLATION")
+        .expect("invalid_output routing entry present");
+    assert_eq!(invalid_route["status_class"], "invalid_output");
+    assert_eq!(invalid_route["occurrences"], 1);
+}
+
 // ── fault routing (evals-guidelines) ────────────────────────────────────────
 
 #[test]
