@@ -40,8 +40,9 @@ jobs:
   rotation:
     name: Tier 2 — live rotation (scenario × model cells)
     runs-on: ubuntu-latest
-    # Job ceiling 30 min vs --budget-mins 20: the slack lets the runner
-    # finish the trial in flight and record every skipped cell absent.
+    # Job ceiling 30 min vs --budget-mins 20 (15 rotation + 5 ablation): the
+    # slack lets the runner finish the trial in flight and record every
+    # skipped cell absent.
     timeout-minutes: 30
 
     steps:
@@ -63,8 +64,29 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           mkdir -p reports
-          cargo run --release -- live --budget-mins 20 \
+          # Budget split (evallerina-vvt): rotation 15 mins + ablation 5 mins
+          # = the same 20-minute total, still under the 30-min job ceiling.
+          cargo run --release -- live --budget-mins 15 \
             | tee -a reports/tier2-rotation.jsonl
+
+      # Ablation cells (evallerina-vvt): produce arm=ablated rows next to
+      # the arm=full rotation rows in the same run. Gated if: always() so
+      # a failed/absent rotation never prevents ablation rows from being
+      # attempted or recorded. `wai` is already on PATH from the install
+      # step above, so --real-artifacts works; the ablate CLI refuses to
+      # fake artifacts loudly if it is absent. The reports/ dir was created
+      # by the rotation step (mkdir runs first there, before any failure
+      # exit); re-assert it here since this step runs unconditionally.
+      # One representative scenario per rotation keeps the budget honest.
+      - name: Run ablation cells
+        if: always()
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          mkdir -p reports
+          cargo run --release -- ablate wai-hint-adherence-corrupt-config \
+            --real-artifacts --budget-mins 5 --out reports/ablation-cells.jsonl
+          cat reports/ablation-cells.jsonl | tee -a reports/tier2-rotation.jsonl
 
       # Aggregate the rows into the fault dashboard and run the
       # fault-routing step in its dry-run default: the additive routed
