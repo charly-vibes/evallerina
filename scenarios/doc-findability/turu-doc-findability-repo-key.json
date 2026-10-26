@@ -1,0 +1,46 @@
+{
+  "name": "turu-doc-findability-repo-key",
+  "provenance": "ticket evallerina-vrr (doc-findability family, phase 4 of add-ecosystem-doc-evals). Recorded live against turu (whisper-vibes, installed from https://github.com/charly-vibes/whisper tag v0.11.1; envelope cli_version 0.11.0) on 2026-10-26 with the evallerina tier-2 harness (cargo run --release -- live turu-doc-findability-repo-key --reps 1 --model openrouter/free --budget-mins 5; model id verbatim: openrouter/free). Fixture (materialized by the scenario via Scenario::fixture_file, not present at capture time): a whisper repo slice — an llms.txt entry point whose 'Feature docs' section (deliberately not the first section) breadcrumbs docs/features/repo-key.md, a seeded doc for a REAL turu capability verified hermetically before the capability was committed to: `turu key --json` exits 0 in a scratch non-git dir with isolated HOME and scrubbed env (pure determinism from the checkout path; no network, no writes). Verified discovery channel: llms.txt-breadcrumb — the recorded agent reads llms.txt, follows the breadcrumb to the seeded doc, and runs the documented command (exit 0). Second of two live recordings (two-strike rule): the first ended invalid_output (free model protocol failure, empty replay — not a findability signal); this run passed all checks.",
+  "recorded": {
+    "tool": "turu",
+    "version": "0.11.0",
+    "date": "2026-10-26"
+  },
+  "steps": [
+    {
+      "command": "ls -la /tmp/.tmpgws7PC",
+      "stdout": "total 4\ndrwxr-xr-x.     4 sasha sasha    100 Oct 26 17:05 .\ndrwxrwxrwt. 45388 root  root  938300 Oct 26 17:05 ..\ndrwxr-xr-x.     2 sasha sasha     40 Oct 26 17:05 .sandbox-home\ndrwxr-xr-x.     3 sasha sasha     60 Oct 26 17:05 docs\n-rw-r--r--.     1 sasha sasha    705 Oct 26 17:05 llms.txt\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "cat /tmp/.tmpgws7PC/llms.txt && ls -la /tmp/.tmpgws7PC/docs",
+      "stdout": "# turu — whisper workspace knowledge\n\nturu is the whisper CLI: a knowledge-scope manager for agent checkouts.\nIt keeps per-repo and per-branch knowledge files under `.whisper/`, with\ncanonical repo keys, distill contracts, and transport-agnostic bundles.\n\n## Usage\n\nEvery turu command emits a genesis envelope: pass `--json` for\nmachine-readable output, read `ok`, and follow `hints` when present.\n\n## House rules\n\nKnowledge files are append-only between distills; the managed block in\nAGENTS.md is turu's surface in the agent-facing config.\n\n## Feature docs\n\n- [Canonical repo key](docs/features/repo-key.md) — how turu derives a\n  workspace's deterministic repo key, and the command that prints it.\ntotal 0\ndrwxr-xr-x. 3 sasha sasha  60 Oct 26 17:05 .\ndrwxr-xr-x. 4 sasha sasha 100 Oct 26 17:05 ..\ndrwxr-xr-x. 2 sasha sasha  60 Oct 26 17:05 features\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "cat /tmp/.tmpgws7PC/docs/features/repo-key.md",
+      "stdout": "# Feature: canonical repo key\n\n`turu key --json` derives the workspace's canonical repo key — pure\ndeterminism from the checkout path. No network, no git history reads,\nno writes: it is safe to run anywhere, in any checkout state.\n\nThe key identifies the repo slot turu stores knowledge under (see the\n`data.repo_key` field of the envelope). Odd keys like `local/...`\nbelong to paths outside any known repository host.\n\n## Command\n\n```\nturu key --json\n```\n\nExits 0 with `ok: true`; the envelope's `data` carries `repo_key`,\n`branch_slug`, `worktree_slot`, and `workspace_root`.\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "turu key --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.1\",\"cli_version\":\"0.11.0\",\"envelope_kind\":\"ok\",\"data\":{\"branch_slug\":\"none\",\"group\":null,\"repo_key\":\"local/.tmpgws7PC\",\"workspace_root\":\"/tmp/.tmpgws7PC/.sandbox-home/.whisper\",\"worktree_slot\":\".tmpgws7PC\"},\"warnings\":[],\"hints\":[{\"command\":\"turu resolve <scope> to get an exact write destination\",\"description\":\"turu resolve <scope> to get an exact write destination\"}],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    },
+    {
+      "command": "turu key --json",
+      "stdout": "{\"ok\":true,\"envelope_version\":\"0.1\",\"cli_version\":\"0.11.0\",\"envelope_kind\":\"ok\",\"data\":{\"branch_slug\":\"none\",\"group\":null,\"repo_key\":\"local/.tmpgws7PC\",\"workspace_root\":\"/tmp/.tmpgws7PC/.sandbox-home/.whisper\",\"worktree_slot\":\".tmpgws7PC\"},\"warnings\":[],\"hints\":[{\"command\":\"turu resolve <scope> to get an exact write destination\",\"description\":\"turu resolve <scope> to get an exact write destination\"}],\"meta\":{\"duration_ms\":0,\"tx\":null,\"request_id\":null}}\n",
+      "stderr": "",
+      "exit_code": 0,
+      "executed": true
+    }
+  ]
+}

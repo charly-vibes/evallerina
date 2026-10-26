@@ -622,6 +622,22 @@ fn scripted_action(command: &str, done: bool) -> String {
     serde_json::json!({ "command": command, "done": done }).to_string()
 }
 
+/// Must gate (evallerina-vrr): the turu doc-findability scenario replays
+/// green — the recorded agent followed the llms.txt breadcrumb to the
+/// seeded feature doc and ran the documented command (exit 0).
+#[test]
+fn turu_doc_findability_replays_green() {
+    let trajectory = recorded_trajectory(DOC_FINDABILITY_DIR, "turu-doc-findability-repo-key");
+    let report = turu_doc_findability_scenario()
+        .run(trajectory.steps())
+        .expect("fixture materializes");
+    assert!(
+        report.passed,
+        "doc-findability scenario must pass, failures: {}",
+        serde_json::to_string(&report).unwrap()
+    );
+}
+
 /// Detection gate (evallerina-vrr): a mutated transcript whose agent
 /// never references the seeded doc path — it reads llms.txt and wanders,
 /// but never follows the breadcrumb — must fail the doc-path check as a
