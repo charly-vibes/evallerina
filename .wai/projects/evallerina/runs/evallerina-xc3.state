@@ -1,0 +1,10 @@
+ticket: evallerina-xc3
+branch: main
+brief_path: .wai/projects/evallerina/briefs/evallerina-xc3.md
+steps:
+  - claim:b588579
+  - gates:b588579
+  - spawn:745eae6
+  - verify:745eae6
+  - ship:745eae6
+  - stop:745eae6
