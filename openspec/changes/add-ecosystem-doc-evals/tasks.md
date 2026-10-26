@@ -44,10 +44,17 @@
 
 ## 4. Doc-findability scenarios (first tools)
 
-- [ ] 4.1 Fixture: turu (whisper) repo slice with llms.txt breadcrumb to a
+- [x] 4.1 Fixture: turu (whisper) repo slice with llms.txt breadcrumb to a
   seeded feature doc
-- [ ] 4.2 Record live tier-2 transcript; land scenario JSON + tier-1 replay in
+  (evallerina-vrr: turu-doc-findability-repo-key, llms.txt 'Feature docs'
+  breadcrumb → docs/features/repo-key.md documenting turu key --json,
+  verified exit 0 hermetically in the sandbox)
+- [x] 4.2 Record live tier-2 transcript; land scenario JSON + tier-1 replay in
   same commit (design D5)
+  (evallerina-vrr: 03a2617 — live turu 0.11.0 recording via openrouter/free
+  2026-10-26, 5 steps, replay + blind tests in tests/evals_replay.rs;
+  ERR_DOC_NOT_FINDABLE routes to turu/whisper never genesis,
+  tests/routing.rs doc_findability)
 - [ ] 4.3 Repeat for testaruda and ah; step budget + discovery-channel row
   provenance asserted in replay tests
 
