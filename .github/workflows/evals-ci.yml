@@ -69,13 +69,21 @@ jobs:
       # The routing-parity tests (tests/routing.rs) drive the bd CLI in
       # sandboxes (Sandbox::with_beads -> bd init); the runner image has
       # no bd, which left the push gate red since evallerina-0sy
-      # (evallerina-ean). Install the same Homebrew formula local dev
-      # uses so CI and dev exercise identical routing semantics.
+      # (evallerina-ean). Install the official release binary (pinned
+      # version, checksum-verified) so CI and dev exercise identical
+      # routing semantics.
       - name: Install bd (beads CLI for routing-parity sandboxes)
         env:
-          HOMEBREW_NO_AUTO_UPDATE: 1
-          HOMEBREW_NO_INSTALL_CLEANUP: 1
-        run: brew install beads
+          BD_VERSION: v1.3.2
+        run: |
+          curl -fsSLo /tmp/beads.tgz \
+            "https://github.com/gastownhall/beads/releases/download/${BD_VERSION}/beads_${BD_VERSION#v}_linux_amd64.tar.gz"
+          curl -fsSLo /tmp/checksums.txt \
+            "https://github.com/gastownhall/beads/releases/download/${BD_VERSION}/checksums.txt"
+          grep "linux_amd64" /tmp/checksums.txt | sed 's|beads_[^ ]*linux_amd64.tar.gz|/tmp/beads.tgz|' | (cd /tmp && sha256sum -c -)
+          tar -xzf /tmp/beads.tgz -C /tmp bd
+          sudo mv /tmp/bd /usr/local/bin/bd
+          bd version
 
       - name: Run tier 0 (fmt, clippy -D warnings, tests)
         run: just tier0
