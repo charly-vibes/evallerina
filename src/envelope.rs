@@ -13,7 +13,7 @@
 //! code.
 
 use genesis::evals::{
-    CheckOutcome, EnvelopeOutcome, ErrorTaxonomy, ScenarioResult, parse_envelope,
+    CheckOutcome, EnvelopeOutcome, ErrorTaxonomy, ScenarioResult, parse_envelope_value,
 };
 use serde_json::Value;
 
@@ -57,29 +57,18 @@ impl From<JsonError> for EnvelopeError {
 
 /// Commands suggested by the envelope, in order.
 ///
-/// Reads the dulce channel `data.remediation[].command` *and* the
-/// generic top-level `hints[].command` (genesis helpers' shape), so a
-/// check passes against either channel layout. Covering both here —
-/// not in a check — keeps each check single-fault.
+/// Delegates to `genesis::evals::parse_envelope_value` (genesis-0zh): the
+/// lenient reader owns the dual-channel union — the dulce channel
+/// `data.remediation[].command` first, then the generic top-level
+/// `hints[].command` (and bare-string hints) — so a check passes against
+/// either channel layout with no local hint parser to drift.
 pub fn remediation_commands(value: &Value) -> Vec<String> {
-    let read_commands = |arr: &Vec<Value>| -> Vec<String> {
-        arr.iter()
-            .filter_map(|h| h.get("command").and_then(Value::as_str))
-            .map(str::to_owned)
-            .collect()
-    };
-    let mut commands = value
-        .pointer("/data/remediation")
-        .and_then(Value::as_array)
-        .map(read_commands)
-        .unwrap_or_default();
-    if let Ok(EnvelopeOutcome::Error {
-        mut hint_commands, ..
-    }) = parse_envelope(&serde_json::to_string(value).expect("Value serializes"))
-    {
-        commands.append(&mut hint_commands);
+    match parse_envelope_value(value) {
+        Ok(EnvelopeOutcome::Error {
+            hint_commands, ..
+        }) => hint_commands,
+        _ => Vec::new(),
     }
-    commands
 }
 
 /// Assert `steps[step]` exited nonzero with a parseable error envelope
